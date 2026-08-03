@@ -1,5 +1,14 @@
 # Summarizer Studio
 
+![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F?logo=springboot&logoColor=white)
+![Vaadin](https://img.shields.io/badge/Vaadin%20Flow-25-00B4F0?logo=vaadin&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
+![Ollama](https://img.shields.io/badge/LLM-Ollama%20lokal-000000?logo=ollama&logoColor=white)
+[![Docker Hub](https://img.shields.io/docker/v/mtprause/summarizer?label=Docker%20Hub&logo=docker&logoColor=white&color=2496ED)](https://hub.docker.com/r/mtprause/summarizer)
+[![Image Size](https://img.shields.io/docker/image-size/mtprause/summarizer/latest?logo=docker&logoColor=white&color=2496ED)](https://hub.docker.com/r/mtprause/summarizer)
+![Privacy](https://img.shields.io/badge/Privacy-100%25%20lokal%20·%20keine%20Cloud-2e7d32)
+
 Dein persönliches Wissensarchiv — **läuft komplett lokal, keine Cloud, keine API-Keys.**
 
 Schick Texte, Links, PDFs, Office-Dateien, Bilder oder Sprachnachrichten hinein —
