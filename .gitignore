@@ -10,3 +10,4 @@ vite.generated.ts
 .idea/
 *.iml
 .DS_Store
+KONZEPT.md
