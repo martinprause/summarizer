@@ -60,10 +60,11 @@ und Updates.
 Voraussetzung: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 (wird vom Installer bei Bedarf mitinstalliert). Empfohlen: 8 GB RAM oder mehr für das lokale LLM.
 
-Zum Installieren reichen **zwei Dateien** - der Installer erzeugt Konfiguration
-(`.env`) und `docker-compose.yml` selbst und lädt alles Weitere von Docker Hub.
-Das komplette Repository braucht nur, wer das Chrome-Addon nutzen oder selbst
-entwickeln will.
+Zum Installieren reichen **zwei Dateien** von der
+[Releases-Seite](https://github.com/martinprause/summarizer/releases/latest) -
+der Installer erzeugt Konfiguration (`.env`) und `docker-compose.yml` selbst
+und lädt alles Weitere von Docker Hub. Das komplette Repository braucht nur,
+wer selbst entwickeln will.
 
 ### Windows
 
@@ -102,12 +103,14 @@ meldet es im Studio.
 
 Speichert Webseiten, markierten Text und Bilder mit einem Klick oder per Rechtsklick-Menü.
 
-1. Repository liegt lokal vor (per `git clone` oder ZIP-Download → entpacken).
-   Wichtig: Der Ordner `clients/chrome-extension` muss dauerhaft liegen bleiben -
-   Chrome lädt die Erweiterung von dort.
+1. **`summarizer-chrome-extension.zip`** von der
+   [Releases-Seite](https://github.com/martinprause/summarizer/releases/latest)
+   herunterladen und in einen dauerhaften Ordner entpacken (z. B.
+   `C:\Summarizer\chrome-extension`) - Chrome lädt die Erweiterung von dort,
+   der Ordner darf nicht gelöscht werden
 2. Chrome öffnen → Adresszeile: `chrome://extensions`
 3. Oben rechts **„Entwicklermodus"** einschalten
-4. **„Entpackte Erweiterung laden"** klicken → Ordner `clients/chrome-extension` auswählen
+4. **„Entpackte Erweiterung laden"** klicken → den entpackten Ordner auswählen
 5. Im Studio ein API-Token holen: **API-Tokens → Neues Token** → Token kopieren
    (wird nur einmal angezeigt)
 6. Extension-Symbol in Chrome → Rechtsklick → **„Optionen"**:
