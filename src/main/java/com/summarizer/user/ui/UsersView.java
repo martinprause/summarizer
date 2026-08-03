@@ -10,7 +10,6 @@ import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
@@ -62,20 +61,9 @@ public class UsersView extends VerticalLayout {
         grid.addColumn(User::getAuthProvider).setHeader(getTranslation("users.column.auth")).setAutoWidth(true);
         grid.addColumn(u -> FORMAT.format(u.getCreatedAt()))
                 .setHeader(getTranslation("users.column.since")).setAutoWidth(true);
-        grid.addComponentColumn(user -> {
-            Select<String> role = new Select<>();
-            role.setItems("USER", "ADMIN");
-            role.setValue(user.getRole());
-            role.setWidth("110px");
-            role.addValueChangeListener(e -> {
-                if (e.isFromClient()) {
-                    user.setRole(e.getValue());
-                    repository.save(user);
-                    Notification.show(getTranslation("users.roleChanged"));
-                }
-            });
-            return role;
-        }).setHeader(getTranslation("users.column.role")).setAutoWidth(true);
+        // Rollen sind fest: der eingebaute Admin bleibt ADMIN, alle anderen USER
+        grid.addColumn(User::getRole)
+                .setHeader(getTranslation("users.column.role")).setAutoWidth(true);
         grid.addComponentColumn(user -> {
             Button toggle = new Button(user.isLocked()
                     ? getTranslation("users.unlock") : getTranslation("users.lock"), e -> {
@@ -107,10 +95,6 @@ public class UsersView extends VerticalLayout {
         username.setWidthFull();
         EmailField email = new EmailField(getTranslation("users.field.email"));
         email.setWidthFull();
-        Select<String> role = new Select<>();
-        role.setLabel(getTranslation("users.field.role"));
-        role.setItems("USER", "ADMIN");
-        role.setValue("USER");
 
         Button save = new Button(getTranslation("users.add"), e -> {
             String name = username.getValue().trim();
@@ -123,7 +107,8 @@ public class UsersView extends VerticalLayout {
                 username.setErrorMessage(getTranslation("users.usernameExists"));
                 return;
             }
-            User user = new User(name, role.getValue());
+            // Neue Konten sind immer USER — es gibt genau einen Admin
+            User user = new User(name, "USER");
             user.setEmail(email.getValue().isBlank() ? null : email.getValue().trim());
             repository.save(user);
             dialog.close();
@@ -131,7 +116,7 @@ public class UsersView extends VerticalLayout {
             Notification.show(getTranslation("users.created"));
         });
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        dialog.add(new VerticalLayout(username, email, role, save));
+        dialog.add(new VerticalLayout(username, email, save));
         dialog.open();
     }
 
