@@ -3,7 +3,9 @@
 #   app         -> komplette App im Container
 #   local-llm   -> Ollama-Container (Modelle via 'ollama pull' im Container)
 #
-# Komplett-Start lokal:  docker compose --profile app --profile local-llm --profile whisper up -d --build
+# Komplett-Start:  docker compose --profile app --profile local-llm --profile whisper up -d
+# (App kommt als fertiges Image von Docker Hub; Entwickler bauen mit:
+#  docker build -t mtprause/summarizer:latest .)
 #
 # Zugriff von unterwegs laeuft ueber den Telegram-Bot (Long-Polling, kein Tunnel noetig).
 
@@ -28,10 +30,9 @@ services:
 
   app:
     profiles: ["app"]
-    # Fertiges Image aus der Registry (Installer zieht es);
-    # zum lokalen Bauen: docker compose --profile app build
-    image: ${APP_IMAGE:-ghcr.io/summarizer/summarizer:latest}
-    build: .
+    # Fertiges Image von Docker Hub — Enduser bauen nichts selbst.
+    # Eigenes Image: APP_IMAGE in .env setzen.
+    image: ${APP_IMAGE:-mtprause/summarizer:latest}
     pull_policy: ${APP_PULL_POLICY:-missing}
     container_name: summarizer-app
     restart: unless-stopped

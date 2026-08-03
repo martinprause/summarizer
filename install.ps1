@@ -70,9 +70,12 @@ APP_PORT=$appPort
 $envContent = Get-Content ".env" -Raw
 $profiles = @("--profile", "app")
 if ($envContent -match "OLLAMA_BASE_URL=http://ollama") { $profiles += @("--profile", "local-llm") }
-Write-Host "Lade Images (oder baue lokal, falls Registry nicht erreichbar) ..."
+Write-Host "Lade Images von Docker Hub ..."
 docker compose @profiles pull
-if ($LASTEXITCODE -ne 0) { docker compose @profiles build }
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FEHLER: Images konnten nicht geladen werden - Internetverbindung pruefen." -ForegroundColor Red
+    exit 1
+}
 docker compose @profiles up -d
 if ($LASTEXITCODE -ne 0) { Write-Host "docker compose fehlgeschlagen." -ForegroundColor Red; exit 1 }
 

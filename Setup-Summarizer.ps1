@@ -233,13 +233,10 @@ WHISPER_MODEL=small
         if ($audioBox.Checked) { $profiles += @("--profile", "whisper") }
 
         Set-Status "Lade Programm-Images herunter ..." 35
-        Write-Log "Ziehe fertige Images aus der Registry (kein lokaler Build noetig) ..."
+        Write-Log "Ziehe fertige Images von Docker Hub (kein lokaler Build) ..."
         docker compose @profiles pull 2>&1 | ForEach-Object { Write-Log $_ }
         if ($LASTEXITCODE -ne 0) {
-            Write-Log "Registry nicht erreichbar — baue lokal (dauert laenger) ..."
-            Set-Status "Baue Anwendung lokal ..." 40
-            docker compose @profiles build 2>&1 | ForEach-Object { Write-Log $_ }
-            if ($LASTEXITCODE -ne 0) { throw "Weder Download noch lokaler Build erfolgreich." }
+            throw "Images konnten nicht geladen werden - Internetverbindung pruefen."
         }
 
         Set-Status "Starte Container ..." 55

@@ -68,18 +68,14 @@ chmod +x install.sh
 
 ```bash
 cp .env.example .env      # anpassen: Passwörter, Modelle, Ports
-docker compose --profile app --profile local-llm up -d --build
+docker compose --profile app --profile local-llm up -d
 ```
 
 Audio-Transkription zusätzlich: `docker compose --profile whisper up -d`
 
-### Fertiges Image statt Selbstbauen
-
-In `.env` setzen, dann startet Compose ohne Build:
-
-```
-APP_IMAGE=<dockerhub-name>/summarizer:latest
-```
+Die App kommt als fertiges Image von Docker Hub
+(**`mtprause/summarizer:latest`**) — es wird nichts lokal gebaut.
+Anderes Image? `APP_IMAGE=...` in `.env` setzen.
 
 ## Erste Schritte
 
@@ -111,11 +107,12 @@ docker exec summarizer-postgres pg_dump -U summarizer summarizer > backup.sql
 **Update:**
 
 ```bash
-git pull
-docker compose --profile app --profile local-llm up -d --build
+docker compose --profile app --profile local-llm pull
+docker compose --profile app --profile local-llm up -d
 ```
 
-Datenbank-Migrationen (Flyway) laufen beim Start automatisch; Daten bleiben erhalten.
+Zieht das neueste Image, ersetzt nur den Container. Datenbank-Migrationen (Flyway)
+laufen beim Start automatisch; Daten bleiben erhalten (Docker-Volumes).
 
 ## Konfiguration (`.env`)
 

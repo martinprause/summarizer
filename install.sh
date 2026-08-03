@@ -66,8 +66,11 @@ fi
 # --- 3. Stack starten ---
 PROFILES=(--profile app)
 grep -q "OLLAMA_BASE_URL=http://ollama" .env && PROFILES+=(--profile local-llm)
-echo "Lade Images (oder baue lokal, falls Registry nicht erreichbar) ..."
-docker compose "${PROFILES[@]}" pull || docker compose "${PROFILES[@]}" build
+echo "Lade Images von Docker Hub ..."
+if ! docker compose "${PROFILES[@]}" pull; then
+    echo "FEHLER: Images konnten nicht geladen werden - Internetverbindung pruefen." >&2
+    exit 1
+fi
 docker compose "${PROFILES[@]}" up -d
 
 # --- 4. Auf App warten, dann Browser oeffnen ---

@@ -104,8 +104,8 @@ PROFILES=(--profile app)
 (
     echo "10" ; echo "# Lade Programm-Images herunter ..."
     if ! docker compose "${PROFILES[@]}" pull > /tmp/summarizer-install.log 2>&1; then
-        echo "30" ; echo "# Registry nicht erreichbar — baue lokal ..."
-        docker compose "${PROFILES[@]}" build >> /tmp/summarizer-install.log 2>&1
+        echo "100" ; echo "# FEHLER: Images konnten nicht geladen werden - Internetverbindung pruefen."
+        exit 1
     fi
     echo "50" ; echo "# Starte Container ..."
     docker compose "${PROFILES[@]}" up -d >> /tmp/summarizer-install.log 2>&1

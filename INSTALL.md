@@ -29,7 +29,8 @@ Fehlt Docker, installiert das Skript es unter Linux automatisch
 2. Fragen: Sprache der Inhalte (bestimmt das Embedding-Modell), lokales LLM ja/nein,
    Admin-Passwort — RAM-Erkennung wählt das passende Chat-Modell
 3. Freien Port suchen (Standard **8181**, sonst nächster freier)
-4. `.env` schreiben, Container bauen und starten
+4. `.env` schreiben, fertige Images von Docker Hub laden
+   (`mtprause/summarizer`) und Container starten — **nichts wird lokal gebaut**
 5. Modelle im Hintergrund laden (`ollama-init`)
 6. Warten bis die App antwortet → Browser öffnen
 
@@ -64,8 +65,10 @@ docker exec summarizer-postgres pg_dump -U summarizer summarizer > backup.sql
 ## Update
 
 ```bash
-git pull
-docker compose --profile app --profile local-llm up -d --build
+docker compose --profile app --profile local-llm pull
+docker compose --profile app --profile local-llm up -d
 ```
 
-Datenbank-Migrationen (Flyway) laufen beim Start automatisch.
+Zieht das neueste Image von Docker Hub und ersetzt nur den Container —
+alle Daten bleiben (Docker-Volumes). Datenbank-Migrationen (Flyway)
+laufen beim Start automatisch.
