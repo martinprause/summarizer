@@ -1,0 +1,38 @@
+# =====================================================================
+# Stage 1 — Build: Maven + Node bauen die App inklusive Vaadin-Frontend
+# =====================================================================
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
+
+# Dependencies zuerst (eigener Layer -> Cache bleibt bei Code-Änderungen erhalten)
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+
+# Quellcode + Frontend-Ressourcen
+COPY src src
+
+# Produktions-Build: Vaadin baut das optimierte Frontend-Bundle ins Jar
+# (ohne -Dvaadin.productionMode bleibt das Jar im Dev-Modus und braucht zur
+#  Laufzeit den Quellordner — im Runtime-Image nicht vorhanden)
+RUN mvn -B -q -DskipTests -Pproduction package
+
+# =====================================================================
+# Stage 2 — Runtime: schlanke JRE, nur das fertige Jar
+# =====================================================================
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+# Nicht als root laufen
+RUN groupadd --system summarizer && useradd --system --gid summarizer summarizer \
+    && mkdir -p /data/files && chown -R summarizer:summarizer /data
+
+COPY --from=build --chown=summarizer:summarizer /build/target/summarizer-*.jar app.jar
+
+USER summarizer
+EXPOSE 8080
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["sh", "-c", "curl -fsS http://localhost:8080/login > /dev/null || exit 1"]
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

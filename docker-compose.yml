@@ -1,0 +1,102 @@
+# Profile:
+#   (ohne)      -> nur Postgres (lokale Entwicklung, App aus IDE/Maven)
+#   app         -> komplette App im Container
+#   local-llm   -> Ollama-Container (Modelle via 'ollama pull' im Container)
+#
+# Komplett-Start lokal:  docker compose --profile app --profile local-llm --profile whisper up -d --build
+#
+# Zugriff von unterwegs laeuft ueber den Telegram-Bot (Long-Polling, kein Tunnel noetig).
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: summarizer-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-summarizer}
+      POSTGRES_USER: ${POSTGRES_USER:-summarizer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
+    ports:
+      # Nur localhost (Entwicklung); 5433 weil lokale PostgreSQL-Installation ggf. 5432 belegt
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-summarizer} -d ${POSTGRES_DB:-summarizer}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    profiles: ["app"]
+    # Fertiges Image aus der Registry (Installer zieht es);
+    # zum lokalen Bauen: docker compose --profile app build
+    image: ${APP_IMAGE:-ghcr.io/summarizer/summarizer:latest}
+    build: .
+    pull_policy: ${APP_PULL_POLICY:-missing}
+    container_name: summarizer-app
+    restart: unless-stopped
+    ports:
+      # Einziger nach aussen sichtbarer Port (APP_PORT in .env, Default 8181)
+      - "${APP_PORT:-8181}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-summarizer}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-summarizer}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      CHAT_MODEL: ${CHAT_MODEL:-llama3.2:latest}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      FILES_DIR: /data/files
+      WHISPER_BASE_URL: http://whisper:9000
+      VAADIN_LAUNCH_BROWSER: "false"
+    volumes:
+      - files:/data/files
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ollama:
+    profiles: ["local-llm"]
+    image: ollama/ollama:latest
+    container_name: summarizer-ollama
+    ports:
+      # Nur localhost — im Container-Netz reden die Dienste direkt miteinander
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+  # One-Shot: laedt Chat- und Embedding-Modell automatisch beim ersten Start
+  ollama-init:
+    profiles: ["local-llm"]
+    image: ollama/ollama:latest
+    container_name: summarizer-ollama-init
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "until ollama list >/dev/null 2>&1; do sleep 2; done &&
+       ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
+       ollama pull ${EMBEDDING_MODEL:-nomic-embed-text}"
+    restart: "no"
+
+  # Whisper: Audio-Transkription (Sprachnachrichten aus der App)
+  whisper:
+    profiles: ["whisper"]
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: summarizer-whisper
+    environment:
+      ASR_MODEL: ${WHISPER_MODEL:-small}
+      ASR_ENGINE: faster_whisper
+    volumes:
+      - whisper:/root/.cache
+    restart: unless-stopped
+
+
+volumes:
+  pgdata:
+  ollama:
+  files:
+  whisper:

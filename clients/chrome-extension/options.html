@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Summarizer — Einstellungen</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 480px; margin: 40px auto; }
+        label { display: block; margin: 14px 0 4px; font-weight: 600; }
+        input { width: 100%; padding: 8px; border: 1px solid #bbb; border-radius: 6px;
+                box-sizing: border-box; font-family: monospace; }
+        button { margin-top: 16px; padding: 9px 22px; border: none; border-radius: 8px;
+                 background: #1a73e8; color: white; font-size: 0.95rem; cursor: pointer; }
+        #status { margin-top: 12px; min-height: 1.2em; }
+        #status.ok { color: #2e7d32; }
+        #status.error { color: #c62828; }
+    </style>
+</head>
+<body>
+    <h1>Summarizer — Einstellungen</h1>
+    <label for="serverUrl">Server-URL</label>
+    <input id="serverUrl" placeholder="http://localhost:8080 oder https://xxxx.ngrok.app">
+    <label for="token">API-Token</label>
+    <input id="token" type="password" placeholder="sum_…">
+    <button id="save">Speichern &amp; testen</button>
+    <p id="status"></p>
+    <script src="options.js"></script>
+</body>
+</html>

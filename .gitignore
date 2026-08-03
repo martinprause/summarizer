@@ -1,0 +1,12 @@
+target/
+node_modules/
+data/
+src/main/frontend/generated/
+src/main/bundles/
+.vaadin/
+vite.generated.ts
+*.log
+.env
+.idea/
+*.iml
+.DS_Store

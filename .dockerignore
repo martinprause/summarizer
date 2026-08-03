@@ -1,0 +1,14 @@
+# Build-Kontext klein halten — im Container wird frisch gebaut
+target/
+node_modules/
+src/main/frontend/generated/
+src/main/bundles/
+.vaadin/
+data/
+.git/
+.idea/
+.vscode/
+clients/summarizer_app/build/
+clients/summarizer_app/.dart_tool/
+*.log
+.env
