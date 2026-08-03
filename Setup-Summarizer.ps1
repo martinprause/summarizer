@@ -82,7 +82,7 @@ $llmBox.DropDownStyle = "DropDownList"
 $llmBox.SelectedIndex = 0
 $form.Controls.Add($llmBox)
 
-New-Label "Admin-Passwort (leer = wird erzeugt)" 28 158 300 $true | Out-Null
+New-Label "Admin-Passwort (leer = Standard 'admin')" 28 158 300 $true | Out-Null
 $pwBox = New-Object System.Windows.Forms.TextBox
 $pwBox.Location = New-Object System.Drawing.Point(28, 180)
 $pwBox.Size = New-Object System.Drawing.Size(250, 26)
@@ -279,7 +279,8 @@ WHISPER_MODEL=small
         Write-Log "Starten:     Desktop-Verknuepfung 'Summarizer' (startet Docker + Browser)"
         Write-Log "Benutzer:    admin"
         if ($pwBox.Text) { Write-Log "Passwort:    (wie eingegeben)" }
-        else { Write-Log "Passwort:    docker logs summarizer-app  (Zeile 'Passwort:')" }
+        else { Write-Log "Passwort:    admin (Standard - bitte im Studio unter Benutzer aendern)" }
+        Write-Log "Login:       standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
         $openButton.Enabled = $true
         Start-Process "http://localhost:$port"
     } catch {

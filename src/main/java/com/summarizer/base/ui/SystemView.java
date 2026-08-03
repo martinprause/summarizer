@@ -21,6 +21,8 @@ public class SystemView extends VerticalLayout {
                       com.summarizer.token.QrCodeService qrCodes,
                       com.summarizer.base.CurrentUser currentUser,
                       com.summarizer.settings.AppSettingsService settings,
+                      com.summarizer.user.UserRepository users,
+                      org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                       @Value("${summarizer.ollama.chat-model}") String chatModel,
                       @Value("${summarizer.ollama.embedding-model}") String embeddingModel) {
         add(new H2(getTranslation("system.status.title")));
@@ -66,7 +68,7 @@ public class SystemView extends VerticalLayout {
 
         addTelegramSection(telegram, qrCodes, currentUser, settings);
         addLanguageSection(settings);
-        addAccessSection(settings, currentUser);
+        addAccessSection(settings, currentUser, users, passwordEncoder);
     }
 
     /** Sprache der Oberfläche: Deutsch oder Englisch, gilt für alle Sitzungen. */
@@ -91,13 +93,28 @@ public class SystemView extends VerticalLayout {
         add(language);
     }
 
-    /** Zugriff: Login an/aus — rein lokaler Betrieb ohne Anmeldung möglich. */
+    /** Zugriff: Login an/aus — Standard ist ohne Login (rein lokaler Betrieb). */
     private void addAccessSection(com.summarizer.settings.AppSettingsService settings,
-                                  com.summarizer.base.CurrentUser currentUser) {
+                                  com.summarizer.base.CurrentUser currentUser,
+                                  com.summarizer.user.UserRepository users,
+                                  org.springframework.security.crypto.password.PasswordEncoder encoder) {
         if (!"ADMIN".equals(currentUser.get().getRole())) {
             return;
         }
         add(new com.vaadin.flow.component.html.H2(getTranslation("system.access.title")));
+        com.vaadin.flow.component.html.Paragraph accessHint =
+                new com.vaadin.flow.component.html.Paragraph(getTranslation("system.access.hint"));
+        accessHint.getStyle().set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "0.9em");
+        add(accessHint);
+        // Warnung, solange das Standard-Passwort "admin" aktiv ist
+        boolean defaultPassword = users.findByUsername("admin")
+                .map(admin -> admin.getPasswordHash() != null
+                        && encoder.matches("admin", admin.getPasswordHash()))
+                .orElse(false);
+        if (defaultPassword) {
+            add(statusLine(getTranslation("system.access.defaultPw"), false));
+        }
         com.vaadin.flow.component.checkbox.Checkbox loginToggle =
                 new com.vaadin.flow.component.checkbox.Checkbox(getTranslation("system.access.loginRequired"));
         loginToggle.setValue(com.summarizer.security.SecurityConfig.isLoginEnabled(settings));

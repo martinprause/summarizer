@@ -1,17 +1,21 @@
-# Summarizer installieren
+[🇩🇪 Deutsch](INSTALL.de.md) · 🇬🇧 English
 
-Alles läuft lokal in Docker. Zugriff von unterwegs geht über den Telegram-Bot —
-kein Tunnel, keine Portfreigabe, keine Cloud nötig.
+# Installing Summarizer
+
+Everything runs locally in Docker - the app ships as a **ready-made image from
+Docker Hub** (`mtprause/summarizer`), nothing is built on your machine.
+Access from anywhere works through the Telegram bot - no tunnel, no port
+forwarding, no cloud needed.
 
 ## Windows
 
-1. Ordner entpacken
-2. Doppelklick auf **`install.bat`**
-3. Fragen beantworten (Sprache, LLM, Admin-Passwort)
-4. Browser öffnet automatisch **http://localhost:8181**
+1. Get the repository (`git clone` or download + unzip)
+2. Double-click **`install.bat`**
+3. Answer the questions (content language, local LLM, optional admin password)
+4. The browser opens **http://localhost:8181** automatically
 
-Fehlt Docker Desktop, installiert das Skript es per `winget` — danach Docker
-einmal starten und `install.bat` erneut ausführen.
+If Docker Desktop is missing, the script installs it via `winget` - then start
+Docker once and run `install.bat` again.
 
 ## Linux / macOS
 
@@ -20,55 +24,46 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Fehlt Docker, installiert das Skript es unter Linux automatisch
-(`get.docker.com`); unter macOS kommt ein Hinweis auf Docker Desktop.
+If Docker is missing, the script installs it automatically on Linux
+(`get.docker.com`); on macOS it points you to Docker Desktop.
 
-## Was der Installer macht
+## What the installer does
 
-1. Docker prüfen / installieren, Engine starten
-2. Fragen: Sprache der Inhalte (bestimmt das Embedding-Modell), lokales LLM ja/nein,
-   Admin-Passwort — RAM-Erkennung wählt das passende Chat-Modell
-3. Freien Port suchen (Standard **8181**, sonst nächster freier)
-4. `.env` schreiben, fertige Images von Docker Hub laden
-   (`mtprause/summarizer`) und Container starten — **nichts wird lokal gebaut**
-5. Modelle im Hintergrund laden (`ollama-init`)
-6. Warten bis die App antwortet → Browser öffnen
+1. Check / install Docker, start the engine
+2. Questions: content language (determines the embedding model), local LLM yes/no,
+   admin password (empty = default `admin`) - RAM detection picks a fitting chat model
+3. Find a free port (default **8181**, otherwise the next free one)
+4. Write `.env`, pull the ready-made images from Docker Hub and start the
+   containers - **nothing is built locally**
+5. Models download in the background (`ollama-init`)
+6. Wait until the app responds → open the browser
 
-## Danach
+## Afterwards
 
 | | |
 |---|---|
 | Studio | http://localhost:8181 |
-| Login | `admin` + Passwort aus `.env`, sonst `docker logs summarizer-app` |
-| Von unterwegs | Studio → System → Telegram-Bot → Token eintragen → QR scannen |
-| Audio-Transkription | `docker compose --profile whisper up -d` |
+| Login | **OFF** by default - the studio opens directly |
+| Enable login | System → Access → "Login required" (takes effect after a restart) |
+| Credentials with login | `admin` / `admin` - **change the default password under "Users"!** |
+| On the go | Studio → System → Telegram bot → enter token → scan QR |
 
-## Betrieb
+## Operations
+
+- **Start**: "Start Summarizer" shortcut or Docker Desktop → group **summarizer**
+- **Stop**: Docker Desktop → stop the group - data is kept
+- **Update**: run the installer again - pulls the latest image and replaces only
+  the app; database, files and models are kept, migrations run automatically
+- **Backup**: Studio → System → "Download backup as ZIP"
+
+Data lives in Docker volumes and survives restarts, updates and stopping.
+It is only deleted if you remove the group **including volumes** in Docker Desktop.
+
+## Advanced (command line)
 
 ```bash
-docker compose --profile app --profile local-llm ps        # Status
-docker compose --profile app --profile local-llm logs -f   # Logs
-docker compose --profile app --profile local-llm down      # stoppen (Daten bleiben)
-docker compose --profile app --profile local-llm up -d     # wieder starten
-```
-
-Daten liegen in Docker-Volumes (`summarizer_pgdata`, `summarizer_files`,
-`summarizer_ollama`) und überleben Neustarts, Updates und `down`.
-Erst `down -v` löscht sie.
-
-**Backup:**
-
-```bash
+docker compose --profile app --profile local-llm ps         # status
+docker compose --profile app --profile local-llm logs -f    # logs
+docker compose --profile whisper up -d                      # audio transcription
 docker exec summarizer-postgres pg_dump -U summarizer summarizer > backup.sql
 ```
-
-## Update
-
-```bash
-docker compose --profile app --profile local-llm pull
-docker compose --profile app --profile local-llm up -d
-```
-
-Zieht das neueste Image von Docker Hub und ersetzt nur den Container —
-alle Daten bleiben (Docker-Volumes). Datenbank-Migrationen (Flyway)
-laufen beim Start automatisch.

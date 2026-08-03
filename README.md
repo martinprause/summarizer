@@ -1,68 +1,71 @@
+[🇩🇪 Deutsch](README.de.md) · 🇬🇧 English
+
 # Summarizer Studio
 
 ![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F?logo=springboot&logoColor=white)
 ![Vaadin](https://img.shields.io/badge/Vaadin%20Flow-25-00B4F0?logo=vaadin&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
-![Ollama](https://img.shields.io/badge/LLM-Ollama%20lokal-000000?logo=ollama&logoColor=white)
+![Ollama](https://img.shields.io/badge/LLM-Ollama%20local-000000?logo=ollama&logoColor=white)
 [![Docker Hub](https://img.shields.io/docker/v/mtprause/summarizer?label=Docker%20Hub&logo=docker&logoColor=white&color=2496ED)](https://hub.docker.com/r/mtprause/summarizer)
 [![Image Size](https://img.shields.io/docker/image-size/mtprause/summarizer/latest?logo=docker&logoColor=white&color=2496ED)](https://hub.docker.com/r/mtprause/summarizer)
-![Privacy](https://img.shields.io/badge/Privacy-100%25%20lokal%20·%20keine%20Cloud-2e7d32)
+![Privacy](https://img.shields.io/badge/Privacy-100%25%20local%20·%20no%20cloud-2e7d32)
 
-Dein persönliches Wissensarchiv — **läuft komplett lokal, keine Cloud, keine API-Keys.**
+Your personal knowledge archive - **runs fully local, no cloud, no API keys.**
 
-Schick Texte, Links, PDFs, Office-Dateien, Bilder oder Sprachnachrichten hinein —
-Summarizer liest sie, fasst sie zusammen, sortiert sie automatisch in deine Kategorien ein,
-vektorisiert sie für semantische Suche und verknüpft sie zu einem Wissensgraphen.
-Suchen kannst du danach in normaler Sprache.
+Send in texts, links, PDFs, Office files, images or voice messages -
+Summarizer reads them, summarizes them, sorts them into your categories
+automatically, vectorizes them for semantic search and connects them into
+a knowledge graph. Afterwards you can search in plain language.
 
-## Was die App kann
+## What the app does
 
 | | |
 |---|---|
-| 🔎 **Semantische Suche** | Finden nach Bedeutung statt Stichwort — „Rezept ohne Sahne" findet den Carbonara-Eintrag |
-| 💬 **Archiv-Chat (RAG)** | Fragen an die eigenen Inhalte, Antworten nur aus dem Archiv, Quellen als klickbare Kacheln |
-| 🕸 **Wissensgraph** | Personen, Technologien, Themen werden automatisch erkannt und verbunden; filterbar, Farben pro Kategorie, Prompt editierbar |
-| 🗂 **Auto-Kategorisierung** | Eigene Kategorien mit Beschreibung (= LLM-Anweisung), hierarchisch mit Drag & Drop; Massen-Umkategorisierung |
-| 📄 **Jedes Format** | Webseiten, PDF/Word/PowerPoint (Tika), Bilder mit Vision-Beschreibung (llava), Sprachnachrichten mit Whisper-Transkription |
-| 📱 **Von überall befüllen** | Telegram-Bot (QR-Pairing), Chrome-Addon, iOS-Kurzbefehl — alles über widerrufbare API-Tokens |
-| 🌐 **Zweisprachig** | Deutsch / English, umschaltbar unter System |
-| 🔒 **Privat** | LLM (Ollama), Datenbank und Dateien bleiben auf deinem Rechner; nur der App-Port ist erreichbar, alle anderen Ports nur auf 127.0.0.1 |
+| 🔎 **Semantic search** | Find by meaning instead of keyword - "recipe without cream" finds the carbonara entry |
+| 💬 **Archive chat (RAG)** | Ask questions about your own content, answers come only from your archive, sources as clickable tiles |
+| 🕸 **Knowledge graph** | People, technologies and topics are detected and connected automatically; filterable, colors per category, editable prompt |
+| 🗂 **Auto categorization** | Your own categories with a description (= LLM instruction), hierarchical with drag & drop; bulk re-categorization |
+| 📄 **Every format** | Web pages, PDF/Word/PowerPoint (Tika), images with vision description (llava), voice messages with Whisper transcription |
+| 📱 **Capture from anywhere** | Telegram bot (QR pairing), Chrome extension, iOS shortcut - all secured by revocable API tokens |
+| 🌐 **Bilingual** | German / English, switchable under System |
+| 🔒 **Private** | LLM (Ollama), database and files stay on your machine; only the app port is exposed, all other ports bind to 127.0.0.1 |
 
-Weitere Funktionen: Favoriten & automatische Tags, Tag-Filter, ZIP-Backup
-(alle Daten + Dateien), JSON-Export, Mehrbenutzer mit Admin-Rolle, Login abschaltbar
-für rein lokalen Betrieb, Rate-Limiting und Prompt-Injection-Schutz auf der API.
+More features: favorites and automatic tags, tag filter, ZIP backup
+(all data + files), JSON export, multi-user with admin role, login optional
+for purely local use, rate limiting and prompt-injection protection on the API.
 
-## Architektur
+## Architecture
 
 ```
-Telegram-Bot     Chrome-Addon     Web-UI (Vaadin)
-     │ Long-Poll      │ REST+Token      │ Session
+Telegram bot     Chrome extension   Web UI (Vaadin)
+     │                │ REST+Token      │ Session
      ▼                ▼                 ▼
 ┌─────────────────────────────────────────────┐
 │   Spring Boot 4 + Vaadin Flow 25 (Java 21)  │
-│   Ingest-Pipeline · RAG · Graph-Extraktion  │
+│   Ingest pipeline · RAG · Graph extraction  │
 └──────┬───────────────┬──────────────┬───────┘
        ▼               ▼              ▼
- PostgreSQL 17    pgvector       Ollama (lokal)
+ PostgreSQL 17    pgvector       Ollama (local)
  + Flyway         (HNSW)         Chat · Embedding · Vision
-                                 + Whisper (Audio)
+                                 + Whisper (audio)
 ```
 
-Alles in Docker Compose; Daten in benannten Volumes (`pgdata`, `ollama`, `files`, `whisper`) —
-sie überleben Neustarts, Updates und `docker compose down`. Erst `down -v` löscht sie.
+Everything runs in Docker containers; the app ships as a ready-made image from
+Docker Hub (**`mtprause/summarizer`**). Data lives in Docker volumes and survives
+restarts and updates.
 
 ## Installation
 
-Voraussetzung: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-(wird vom Installer bei Bedarf mitinstalliert). Empfohlen: 8 GB RAM oder mehr für das lokale LLM.
+Requirement: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+(the installer sets it up if missing). Recommended: 8 GB RAM or more for the local LLM.
 
 ### Windows
 
-1. Repository laden (`git clone` oder ZIP entpacken)
-2. Doppelklick auf **`install.bat`**
-3. Fragen beantworten: Sprache der Inhalte, lokales LLM ja/nein, Admin-Passwort
-4. Browser öffnet automatisch **http://localhost:8181**
+1. Get the repository (`git clone` or download + unzip)
+2. Double-click **`install.bat`**
+3. Answer the questions: content language, local LLM yes/no, admin password
+4. The browser opens **http://localhost:8181** automatically
 
 ### Linux / macOS
 
@@ -73,102 +76,85 @@ chmod +x install.sh
 ./install.sh
 ```
 
-### Manuell (ohne Installer)
+The installer pulls the ready-made image from Docker Hub - nothing is built locally.
 
-```bash
-cp .env.example .env      # anpassen: Passwörter, Modelle, Ports
-docker compose --profile app --profile local-llm up -d
-```
+## First steps
 
-Audio-Transkription zusätzlich: `docker compose --profile whisper up -d`
+1. **No login needed**: the studio opens directly by default (purely local use).
+   Enable login: **System → Access → "Login required"** (takes effect after a restart).
+   Credentials then: **`admin` / `admin`** - please change the default password right
+   away under **Users**; the studio shows a warning while it is active
+2. Create **categories** - the description is the sorting instruction for the LLM
+3. **Connect Telegram**: System → Telegram bot → enter the token from @BotFather →
+   "Connect with Telegram (QR)" → scan. From then on everything you send to the bot
+   lands in your archive, sorted automatically
+4. Install the **Chrome extension** - see [guide below](#installing-the-chrome-extension)
 
-Die App kommt als fertiges Image von Docker Hub
-(**`mtprause/summarizer:latest`**) — es wird nichts lokal gebaut.
-Anderes Image? `APP_IMAGE=...` in `.env` setzen.
+**Good to know:** if the machine is off, Telegram keeps sent messages in its queue
+for about 24 hours - on the next start the app catches up automatically and reports
+it in the studio.
 
-## Erste Schritte
+## Installing the Chrome extension
 
-1. **Login**: `admin` + Passwort aus `.env` (leer gelassen → generiert, steht in `docker logs summarizer-app`)
-2. **Kategorien** anlegen — die Beschreibung ist die Einsortier-Anweisung für das LLM
-3. **Telegram verbinden**: System → Telegram-Bot → Token von @BotFather eintragen → „Mit Telegram verbinden (QR)" → scannen. Ab dann: alles, was du dem Bot schickst, landet automatisch einsortiert im Archiv
-4. **Chrome-Addon** installieren — siehe [Anleitung unten](#chrome-addon-installieren)
+Saves web pages, selected text and images with one click or via the context menu.
 
-**Gut zu wissen:** Ist der Rechner aus, hält Telegram gesendete Nachrichten ~24 Stunden
-in der Warteschlange — beim nächsten Start holt die App alles automatisch nach und
-meldet es im Studio.
+1. Keep the repository on disk (`git clone` or ZIP download + unzip).
+   Important: the folder `clients/chrome-extension` must stay where it is -
+   Chrome loads the extension from there.
+2. Open Chrome → address bar: `chrome://extensions`
+3. Enable **Developer mode** (top right)
+4. Click **"Load unpacked"** → select the folder `clients/chrome-extension`
+5. Get an API token in the studio: **API Tokens → New token** → copy it
+   (shown only once)
+6. Right-click the extension icon in Chrome → **Options**:
+   - **Server URL**: `http://localhost:8181` (or your `APP_PORT`)
+   - **Token**: the copied API token
+   - Save - the connection test reports success
 
-## Chrome-Addon installieren
+After that: clicking the icon saves the current page; right-click on a
+page/selection/image → "Send to Summarizer". Green ✓ on the icon = saved,
+red ! = error (e.g. server off - check the message and send again).
 
-Speichert Webseiten, markierten Text und Bilder mit einem Klick oder per Rechtsklick-Menü.
+Other Chromium browsers (Edge, Brave, Vivaldi) work the same way
+(`edge://extensions` etc.). Firefox is currently not supported.
 
-1. Repository liegt lokal vor (per `git clone` oder ZIP-Download → entpacken).
-   Wichtig: Der Ordner `clients/chrome-extension` muss dauerhaft liegen bleiben —
-   Chrome lädt die Erweiterung von dort.
-2. Chrome öffnen → Adresszeile: `chrome://extensions`
-3. Oben rechts **„Entwicklermodus"** einschalten
-4. **„Entpackte Erweiterung laden"** klicken → Ordner `clients/chrome-extension` auswählen
-5. Im Studio ein API-Token holen: **API-Tokens → Neues Token** → Token kopieren
-   (wird nur einmal angezeigt)
-6. Extension-Symbol in Chrome → Rechtsklick → **„Optionen"**:
-   - **Server-URL**: `http://localhost:8181` (bzw. dein `APP_PORT`)
-   - **Token**: das kopierte API-Token
-   - Speichern — der Verbindungstest meldet Erfolg
+## Operations
 
-Danach: Extension-Symbol anklicken speichert die aktuelle Seite; Rechtsklick auf
-Seite/Textauswahl/Bild → „… an Summarizer senden". Grünes ✓ am Symbol = gespeichert,
-rotes ! = Fehler (z. B. Server aus — dann Meldung prüfen und erneut senden).
+- **Start**: the "Start Summarizer" shortcut (created by the installer) - or start
+  the **summarizer** container group in Docker Desktop
+- **Stop**: stop the group in Docker Desktop - all data is kept
+- **Update**: simply run the installer again (`install.bat` or `./install.sh`) -
+  it pulls the latest image from Docker Hub and replaces only the app; database,
+  files and models are kept. Migrations run automatically on startup
 
-Andere Chromium-Browser (Edge, Brave, Vivaldi) funktionieren genauso
-(`edge://extensions` usw.). Firefox wird derzeit nicht unterstützt.
+**Backup:** Studio → System → "Download backup as ZIP" - all content, categories,
+tags, graph and chat as JSON plus original files and snapshots.
 
-## Betrieb
+**Deleting data** (deliberate, irreversible): remove the group **including volumes**
+in Docker Desktop - take a backup first.
 
-```bash
-docker compose --profile app --profile local-llm ps        # Status
-docker compose --profile app --profile local-llm logs -f   # Logs
-docker compose --profile app --profile local-llm down      # stoppen (Daten bleiben)
-docker compose --profile app --profile local-llm up -d     # starten
-```
+## Configuration (`.env`)
 
-**Backup:** Studio → System → „Backup als ZIP herunterladen" (alle Inhalte, Kategorien,
-Tags, Graph, Chat als JSON plus Original-Dateien). Zusätzlich klassisch:
-
-```bash
-docker exec summarizer-postgres pg_dump -U summarizer summarizer > backup.sql
-```
-
-**Update:**
-
-```bash
-docker compose --profile app --profile local-llm pull
-docker compose --profile app --profile local-llm up -d
-```
-
-Zieht das neueste Image, ersetzt nur den Container. Datenbank-Migrationen (Flyway)
-laufen beim Start automatisch; Daten bleiben erhalten (Docker-Volumes).
-
-## Konfiguration (`.env`)
-
-| Variable | Bedeutung | Standard |
+| Variable | Meaning | Default |
 |---|---|---|
-| `APP_PORT` | Port der Weboberfläche | `8181` |
-| `APP_IMAGE` | Fertiges Image statt lokalem Build | — |
-| `ADMIN_PASSWORD` | Admin-Passwort (leer = generiert + geloggt) | — |
-| `CHAT_MODEL` | Ollama-Chat-Modell (Erststart-Download) | `qwen3.5:4b` |
-| `EMBEDDING_MODEL` | Embedding-Modell — Englisch: `nomic-embed-text` (768), Deutsch/multilingual: `bge-m3` (1024) | `nomic-embed-text` |
-| `EMBEDDING_DIM` | Muss zum Embedding-Modell passen | `768` |
-| `WHISPER_MODEL` | Whisper-Größe (tiny/base/small/medium) | `small` |
+| `APP_PORT` | Port of the web UI | `8181` |
+| `APP_IMAGE` | Alternative app image | `mtprause/summarizer:latest` |
+| `ADMIN_PASSWORD` | Admin password (empty = default `admin`, changeable in the studio) | - |
+| `CHAT_MODEL` | Ollama chat model (downloaded on first start) | `qwen3.5:4b` |
+| `EMBEDDING_MODEL` | Embedding model - English: `nomic-embed-text` (768), German/multilingual: `bge-m3` (1024) | `nomic-embed-text` |
+| `EMBEDDING_DIM` | Must match the embedding model | `768` |
+| `WHISPER_MODEL` | Whisper size (tiny/base/small/medium) | `small` |
 
-Modelle lassen sich später im Studio unter **KI-Modelle** wechseln — bei einem
-Embedding-Wechsel baut die App die Vektor-Datenbank automatisch neu auf.
+Models can be switched later in the studio under **AI Models** - when the embedding
+model changes, the app rebuilds the vector database automatically.
 
-## Entwicklung
+## Development
 
 ```bash
-docker compose up -d postgres          # nur DB
-mvn spring-boot:run                    # Dev-Server auf http://localhost:8080
+docker compose up -d postgres          # database only
+mvn spring-boot:run                    # dev server on http://localhost:8080
 ```
 
-Java 21, Spring Boot 4, Vaadin Flow 25, PostgreSQL 17 + pgvector, Flyway (V1–V9),
-Ollama-API, UI-Push statt Polling (virtuelle Threads). Übersetzungen unter
-`src/main/resources/i18n/`.
+Java 21, Spring Boot 4, Vaadin Flow 25, PostgreSQL 17 + pgvector, Flyway (V1-V9),
+Ollama API, UI updates via Vaadin Push (virtual threads). Translations live in
+`src/main/resources/i18n/`. Build the image: `docker build -t mtprause/summarizer:latest .`

@@ -57,8 +57,11 @@ public class UserBootstrap implements ApplicationRunner {
                         "Artikel, Studien, Anleitungen und Nachschlagewerke aller Art"),
                 defaultCategory(admin.getId())));
 
-        log.info("Admin-Passwort{}: {}", adminPassword.isBlank() ? " (generiert)" : " (aus ENV)",
-                adminPassword.isBlank() ? generatedPassword : "****");
+        if (adminPassword.isBlank()) {
+            log.info("Admin-Passwort: Standard 'admin' — bitte im Studio unter 'Benutzer' ändern!");
+        } else {
+            log.info("Admin-Passwort: aus ADMIN_PASSWORD übernommen");
+        }
 
         TokenService.CreatedToken initial = tokens.createToken(admin.getId(), "initial");
         log.info("""
@@ -87,18 +90,9 @@ public class UserBootstrap implements ApplicationRunner {
         return privat;
     }
 
-    private String generatedPassword;
-
+    /** ADMIN_PASSWORD aus ENV, sonst Standard "admin" (Hinweis in Log und Studio). */
     private String effectiveAdminPassword() {
-        if (!adminPassword.isBlank()) {
-            return adminPassword;
-        }
-        if (generatedPassword == null) {
-            byte[] bytes = new byte[9];
-            new SecureRandom().nextBytes(bytes);
-            generatedPassword = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        }
-        return generatedPassword;
+        return adminPassword.isBlank() ? "admin" : adminPassword;
     }
 
     /** Bestehende Installationen (vor Phase 4): Admin ohne Passwort bekommt eins. */

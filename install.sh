@@ -36,7 +36,7 @@ if [[ ! -f .env ]]; then
     if (( RAM_GB >= 16 )); then CHAT_MODEL=qwen3.5:9b; else CHAT_MODEL=qwen3.5:4b; fi
     echo "RAM: ${RAM_GB} GB -> Chat-Modell: ${CHAT_MODEL} (aenderbar im Studio unter 'KI-Modelle')"
 
-    read -rp "Admin-Passwort (leer = wird generiert und geloggt): " ADMIN_PW
+    read -rp "Admin-Passwort (leer = Standard 'admin', im Studio aenderbar): " ADMIN_PW
 
     # Freien App-Port finden (Standard 8181)
     APP_PORT=8181
@@ -86,7 +86,8 @@ done
 echo ""
 echo "=== Fertig! ==="
 echo "Studio:       http://localhost:${PORT}"
-echo "Admin-Login:  admin / (ADMIN_PASSWORD aus .env oder: docker logs summarizer-app | grep Passwort)"
+echo "Login:        standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
+echo "Admin-Login:  admin / admin (falls kein eigenes Passwort gesetzt - bitte unter Benutzer aendern)"
 if [[ "$READY" == "yes" ]]; then
     if command -v xdg-open >/dev/null; then xdg-open "http://localhost:${PORT}" >/dev/null 2>&1 &
     elif command -v open >/dev/null; then open "http://localhost:${PORT}"; fi

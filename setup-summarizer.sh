@@ -46,7 +46,7 @@ CONFIG=$(zenity --forms --title="$TITLE" --width=480 \
     --text="Einstellungen fuer die Installation" \
     --add-combo="Sprache deiner Inhalte" --combo-values="Deutsch / gemischt|Englisch" \
     --add-combo="KI-Modelle" --combo-values="Lokal in Docker (empfohlen)|Vorhandenes Ollama nutzen" \
-    --add-password="Admin-Passwort (leer = wird erzeugt)" \
+    --add-password="Admin-Passwort (leer = Standard 'admin')" \
     --add-entry="Port der Weboberflaeche" \
     --separator="|") || exit 1
 
@@ -138,7 +138,7 @@ chmod +x "${DESKTOP_DIR}/summarizer.desktop" 2>/dev/null || true
 update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
 
 if curl -sf -o /dev/null "http://localhost:${APP_PORT}/login"; then
-    PW_HINT="siehe: docker logs summarizer-app | grep Passwort"
+    PW_HINT="admin (Standard - bitte im Studio unter Benutzer aendern)"
     [[ -n "$ADMIN_PW" ]] && PW_HINT="(wie eingegeben)"
     info "Installation abgeschlossen.\n\nStudio:    http://localhost:${APP_PORT}\nBenutzer:  admin\nPasswort:  ${PW_HINT}"
     if command -v xdg-open >/dev/null; then xdg-open "http://localhost:${APP_PORT}" >/dev/null 2>&1 &

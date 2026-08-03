@@ -40,7 +40,7 @@ if (-not (Test-Path ".env")) {
     if ($ram -ge 16) { $chatModel = "qwen3.5:9b" } else { $chatModel = "qwen3.5:4b" }
     Write-Host "RAM: $ram GB -> Chat-Modell: $chatModel (aenderbar im Studio unter 'KI-Modelle')"
 
-    $adminPw = Read-Host "Admin-Passwort (leer = wird generiert und geloggt)"
+    $adminPw = Read-Host "Admin-Passwort (leer = Standard 'admin', im Studio aenderbar)"
 
     # Freien App-Port finden (Standard 8181, bei Belegung hochzaehlen)
     $appPort = 8181
@@ -95,7 +95,8 @@ for ($i = 0; $i -lt 60; $i++) {
 Write-Host ""
 Write-Host "=== Fertig! ===" -ForegroundColor Cyan
 Write-Host "Studio:       http://localhost:$port"
-Write-Host "Admin-Login:  admin / (ADMIN_PASSWORD aus .env oder: docker logs summarizer-app | Select-String 'Passwort')"
+Write-Host "Login:        standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
+Write-Host "Admin-Login:  admin / admin (falls kein eigenes Passwort gesetzt - bitte unter Benutzer aendern)"
 if ($ready) {
     Start-Process "http://localhost:$port"
 } else {

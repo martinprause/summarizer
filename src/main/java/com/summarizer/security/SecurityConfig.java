@@ -64,11 +64,12 @@ public class SecurityConfig {
                 configurer.loginView(LoginView.class)).build();
     }
 
+    /** Standard: KEIN Login — rein lokaler Betrieb. Aktivierbar in System → Zugriff. */
     public static boolean isLoginEnabled(AppSettingsService settings) {
         try {
-            return !"false".equals(settings.get(LOGIN_ENABLED_KEY, "true"));
+            return "true".equals(settings.get(LOGIN_ENABLED_KEY, "false"));
         } catch (Exception e) {
-            return true;   // im Zweifel: Login an
+            return false;   // Setting nicht lesbar → Standard ohne Login
         }
     }
 
