@@ -60,18 +60,24 @@ und Updates.
 Voraussetzung: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 (wird vom Installer bei Bedarf mitinstalliert). Empfohlen: 8 GB RAM oder mehr für das lokale LLM.
 
+Zum Installieren reichen **zwei Dateien** - der Installer erzeugt Konfiguration
+(`.env`) und `docker-compose.yml` selbst und lädt alles Weitere von Docker Hub.
+Das komplette Repository braucht nur, wer das Chrome-Addon nutzen oder selbst
+entwickeln will.
+
 ### Windows
 
-1. Repository laden (`git clone` oder ZIP entpacken)
+1. **`install.bat`** und **`install.ps1`** in einen leeren Ordner legen
+   (z. B. `C:\Summarizer`)
 2. Doppelklick auf **`install.bat`**
 3. Fragen beantworten: Sprache der Inhalte, lokales LLM ja/nein, Admin-Passwort
 4. Browser öffnet automatisch **http://localhost:8181**
 
 ### Linux / macOS
 
+**`install.sh`** in einen leeren Ordner legen, dann:
+
 ```bash
-git clone https://github.com/martinprause/summarizer.git
-cd summarizer
 chmod +x install.sh
 ./install.sh
 ```

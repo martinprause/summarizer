@@ -7,9 +7,13 @@ Docker Hub** (`mtprause/summarizer`), nothing is built on your machine.
 Access from anywhere works through the Telegram bot - no tunnel, no port
 forwarding, no cloud needed.
 
+The installer files are all you need - they create `docker-compose.yml` and
+`.env` themselves. The repository is only needed for the Chrome extension
+or the source code.
+
 ## Windows
 
-1. Get the repository (`git clone` or download + unzip)
+1. Put **`install.bat`** + **`install.ps1`** into an empty folder (e.g. `C:\Summarizer`)
 2. Double-click **`install.bat`**
 3. Answer the questions (content language, local LLM, optional admin password)
 4. The browser opens **http://localhost:8181** automatically
@@ -18,6 +22,8 @@ If Docker Desktop is missing, the script installs it via `winget` - then start
 Docker once and run `install.bat` again.
 
 ## Linux / macOS
+
+Put **`install.sh`** into an empty folder, then:
 
 ```bash
 chmod +x install.sh

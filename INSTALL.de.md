@@ -7,9 +7,12 @@ Alles läuft lokal in Docker - die App kommt als **fertiges Image von Docker Hub
 Zugriff von unterwegs geht über den Telegram-Bot - kein Tunnel, keine Portfreigabe,
 keine Cloud nötig.
 
+Zum Installieren reichen die Installer-Dateien - `docker-compose.yml` und `.env`
+erzeugen sie selbst. Das Repository braucht nur, wer Chrome-Addon oder Quellcode will.
+
 ## Windows
 
-1. Repository laden (`git clone` oder ZIP entpacken)
+1. **`install.bat`** + **`install.ps1`** in einen leeren Ordner legen (z. B. `C:\Summarizer`)
 2. Doppelklick auf **`install.bat`**
 3. Fragen beantworten (Sprache der Inhalte, lokales LLM, optional Admin-Passwort)
 4. Browser öffnet automatisch **http://localhost:8181**
@@ -18,6 +21,8 @@ Fehlt Docker Desktop, installiert das Skript es per `winget` - danach Docker
 einmal starten und `install.bat` erneut ausführen.
 
 ## Linux / macOS
+
+**`install.sh`** in einen leeren Ordner legen, dann:
 
 ```bash
 chmod +x install.sh
