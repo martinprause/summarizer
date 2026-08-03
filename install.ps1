@@ -3,6 +3,28 @@
 $ErrorActionPreference = "Stop"
 Write-Host "=== Summarizer Installation ===" -ForegroundColor Cyan
 
+# --- 0. WSL 2 pruefen / installieren (Docker Desktop braucht es als Backend) ---
+$wslOk = $false
+try {
+    wsl.exe --status *>$null
+    if ($LASTEXITCODE -eq 0) { $wslOk = $true }
+} catch {}
+if (-not $wslOk) {
+    Write-Host "WSL 2 fehlt - installiere Windows-Subsystem fuer Linux (braucht Adminrechte)..."
+    try {
+        Start-Process wsl.exe -ArgumentList "--install --no-distribution" -Verb RunAs -Wait
+    } catch {
+        Write-Host "WSL-Installation abgebrochen oder fehlgeschlagen." -ForegroundColor Red
+        Write-Host "Manuell: PowerShell als Administrator oeffnen -> 'wsl --install --no-distribution'" -ForegroundColor Yellow
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "WSL wurde installiert. Bitte den Rechner NEU STARTEN" -ForegroundColor Yellow
+    Write-Host "und dieses Skript danach erneut ausfuehren." -ForegroundColor Yellow
+    exit 0
+}
+Write-Host "WSL 2 OK."
+
 # --- 1. Docker pruefen / installieren ---
 $docker = Get-Command docker -ErrorAction SilentlyContinue
 if (-not $docker) {

@@ -17,8 +17,10 @@ erzeugen sie selbst. Das Repository braucht nur, wer Chrome-Addon oder Quellcode
 3. Fragen beantworten (Sprache der Inhalte, lokales LLM, optional Admin-Passwort)
 4. Browser öffnet automatisch **http://localhost:8181**
 
-Fehlt Docker Desktop, installiert das Skript es per `winget` - danach Docker
-einmal starten und `install.bat` erneut ausführen.
+Fehlt **WSL 2** (Voraussetzung für Docker Desktop), installiert das Skript es
+zuerst (Adminrechte-Abfrage, danach Windows neu starten und Skript erneut
+ausführen). Fehlt Docker Desktop, installiert das Skript es per `winget` -
+danach Docker einmal starten und `install.bat` erneut ausführen.
 
 ## Linux / macOS
 

@@ -166,6 +166,29 @@ function Test-PortFree($port) {
 $installButton.Add_Click({
     $installButton.Enabled = $false
     try {
+        # 0. WSL 2 (Docker Desktop braucht es als Backend)
+        Set-Status "Pruefe WSL 2 ..." 3
+        $wslOk = $false
+        try {
+            wsl.exe --status *>$null
+            if ($LASTEXITCODE -eq 0) { $wslOk = $true }
+        } catch {}
+        if (-not $wslOk) {
+            Write-Log "WSL 2 fehlt — Installation startet (Adminrechte-Abfrage folgt) ..."
+            Set-Status "Installiere WSL 2 ..." 4
+            try {
+                Start-Process wsl.exe -ArgumentList "--install --no-distribution" -Verb RunAs -Wait
+            } catch {
+                throw "WSL-Installation abgebrochen. Manuell: PowerShell als Administrator -> 'wsl --install --no-distribution'"
+            }
+            [System.Windows.Forms.MessageBox]::Show(
+                "WSL 2 wurde installiert. Bitte Windows neu starten und diesen Assistenten erneut ausfuehren.",
+                "Neustart noetig", "OK", "Information") | Out-Null
+            $installButton.Enabled = $true
+            return
+        }
+        Write-Log "WSL 2 bereit."
+
         # 1. Docker
         Set-Status "Pruefe Docker ..." 5
         if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {

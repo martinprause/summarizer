@@ -18,8 +18,10 @@ or the source code.
 3. Answer the questions (content language, local LLM, optional admin password)
 4. The browser opens **http://localhost:8181** automatically
 
-If Docker Desktop is missing, the script installs it via `winget` - then start
-Docker once and run `install.bat` again.
+If **WSL 2** is missing (required by Docker Desktop), the script installs it
+first (admin prompt, then restart Windows and run the script again). If Docker
+Desktop is missing, the script installs it via `winget` - then start Docker
+once and run `install.bat` again.
 
 ## Linux / macOS
 
