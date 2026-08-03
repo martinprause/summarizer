@@ -46,15 +46,15 @@ CONFIG=$(zenity --forms --title="$TITLE" --width=480 \
     --text="Einstellungen fuer die Installation" \
     --add-combo="Sprache deiner Inhalte" --combo-values="Deutsch / gemischt|Englisch" \
     --add-combo="KI-Modelle" --combo-values="Lokal in Docker (empfohlen)|Vorhandenes Ollama nutzen" \
-    --add-password="Admin-Passwort (leer = Standard 'admin')" \
     --add-entry="Port der Weboberflaeche" \
     --separator="|") || exit 1
 
 LANG_CHOICE=$(echo "$CONFIG" | cut -d'|' -f1)
 LLM_CHOICE=$(echo "$CONFIG" | cut -d'|' -f2)
-ADMIN_PW=$(echo "$CONFIG" | cut -d'|' -f3)
-APP_PORT=$(echo "$CONFIG" | cut -d'|' -f4)
+APP_PORT=$(echo "$CONFIG" | cut -d'|' -f3)
 APP_PORT=${APP_PORT:-8181}
+# Admin-Zugang fest: admin/admin - Passwort im Studio unter Benutzer aenderbar
+ADMIN_PW=""
 
 WHISPER=no
 zenity --question --title="$TITLE" --width=420 \

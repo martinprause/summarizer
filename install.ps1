@@ -173,7 +173,8 @@ if (-not (Test-Path ".env")) {
     if ($ram -ge 16) { $chatModel = "qwen3.5:9b" } else { $chatModel = "qwen3.5:4b" }
     Write-Host "RAM: $ram GB -> Chat-Modell: $chatModel (aenderbar im Studio unter 'KI-Modelle')"
 
-    $adminPw = Read-Host "Admin-Passwort (leer = Standard 'admin', im Studio aenderbar)"
+    # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer aenderbar
+    $adminPw = ""
 
     # Freien App-Port finden (Standard 8181, bei Belegung hochzaehlen)
     $appPort = 8181
@@ -229,7 +230,7 @@ Write-Host ""
 Write-Host "=== Fertig! ===" -ForegroundColor Cyan
 Write-Host "Studio:       http://localhost:$port"
 Write-Host "Login:        standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
-Write-Host "Admin-Login:  admin / admin (falls kein eigenes Passwort gesetzt - bitte unter Benutzer aendern)"
+Write-Host "Admin-Login:  admin / admin (Passwort im Studio unter Benutzer aendern)"
 if ($ready) {
     Start-Process "http://localhost:$port"
 } else {

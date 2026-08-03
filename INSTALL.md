@@ -15,7 +15,7 @@ or the source code.
 
 1. Put **`install.bat`** + **`install.ps1`** into an empty folder (e.g. `C:\Summarizer`)
 2. Double-click **`install.bat`**
-3. Answer the questions (content language, local LLM, optional admin password)
+3. Answer the questions (content language, local LLM)
 4. The browser opens **http://localhost:8181** automatically
 
 If **WSL 2** is missing (required by Docker Desktop), the script installs it
@@ -38,8 +38,8 @@ If Docker is missing, the script installs it automatically on Linux
 ## What the installer does
 
 1. Check / install Docker, start the engine
-2. Questions: content language (determines the embedding model), local LLM yes/no,
-   admin password (empty = default `admin`) - RAM detection picks a fitting chat model
+2. Questions: content language (determines the embedding model), local LLM yes/no -
+   RAM detection picks a fitting chat model; admin credentials are fixed at `admin`/`admin`
 3. Find a free port (default **8181**, otherwise the next free one)
 4. Write `.env`, pull the ready-made images from Docker Hub and start the
    containers - **nothing is built locally**

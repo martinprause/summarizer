@@ -71,7 +71,7 @@ You only need the full repository for development.
 1. Put **`install.bat`** and **`install.ps1`** into an empty folder
    (e.g. `C:\Summarizer`)
 2. Double-click **`install.bat`**
-3. Answer the questions: content language, local LLM yes/no, admin password
+3. Answer the questions: content language, local LLM yes/no
 4. The browser opens **http://localhost:8181** automatically
 
 ### Linux / macOS

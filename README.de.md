@@ -71,7 +71,7 @@ wer selbst entwickeln will.
 1. **`install.bat`** und **`install.ps1`** in einen leeren Ordner legen
    (z. B. `C:\Summarizer`)
 2. Doppelklick auf **`install.bat`**
-3. Fragen beantworten: Sprache der Inhalte, lokales LLM ja/nein, Admin-Passwort
+3. Fragen beantworten: Sprache der Inhalte, lokales LLM ja/nein
 4. Browser öffnet automatisch **http://localhost:8181**
 
 ### Linux / macOS

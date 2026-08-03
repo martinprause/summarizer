@@ -82,16 +82,10 @@ $llmBox.DropDownStyle = "DropDownList"
 $llmBox.SelectedIndex = 0
 $form.Controls.Add($llmBox)
 
-New-Label "Admin-Passwort (leer = Standard 'admin')" 28 158 300 $true | Out-Null
-$pwBox = New-Object System.Windows.Forms.TextBox
-$pwBox.Location = New-Object System.Drawing.Point(28, 180)
-$pwBox.Size = New-Object System.Drawing.Size(250, 26)
-$pwBox.UseSystemPasswordChar = $true
-$form.Controls.Add($pwBox)
-
-New-Label "Port der Weboberflaeche" 310 158 250 $true | Out-Null
+# Admin-Zugang fest: admin/admin - Passwort im Studio unter Benutzer aenderbar
+New-Label "Port der Weboberflaeche" 28 158 250 $true | Out-Null
 $portBox = New-Object System.Windows.Forms.NumericUpDown
-$portBox.Location = New-Object System.Drawing.Point(310, 180)
+$portBox.Location = New-Object System.Drawing.Point(28, 180)
 $portBox.Size = New-Object System.Drawing.Size(120, 26)
 $portBox.Minimum = 1024
 $portBox.Maximum = 65535
@@ -241,7 +235,7 @@ $installButton.Add_Click({
 POSTGRES_DB=summarizer
 POSTGRES_USER=summarizer
 POSTGRES_PASSWORD=$dbPassword
-ADMIN_PASSWORD=$($pwBox.Text)
+ADMIN_PASSWORD=
 OLLAMA_BASE_URL=$ollamaUrl
 CHAT_MODEL=$chat
 EMBEDDING_MODEL=$embed
@@ -301,8 +295,7 @@ WHISPER_MODEL=small
         Write-Log "Studio:      http://localhost:$port"
         Write-Log "Starten:     Desktop-Verknuepfung 'Summarizer' (startet Docker + Browser)"
         Write-Log "Benutzer:    admin"
-        if ($pwBox.Text) { Write-Log "Passwort:    (wie eingegeben)" }
-        else { Write-Log "Passwort:    admin (Standard - bitte im Studio unter Benutzer aendern)" }
+        Write-Log "Passwort:    admin (Standard - bitte im Studio unter Benutzer aendern)"
         Write-Log "Login:       standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
         $openButton.Enabled = $true
         Start-Process "http://localhost:$port"
