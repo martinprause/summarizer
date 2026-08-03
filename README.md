@@ -82,11 +82,35 @@ Anderes Image? `APP_IMAGE=...` in `.env` setzen.
 1. **Login**: `admin` + Passwort aus `.env` (leer gelassen → generiert, steht in `docker logs summarizer-app`)
 2. **Kategorien** anlegen — die Beschreibung ist die Einsortier-Anweisung für das LLM
 3. **Telegram verbinden**: System → Telegram-Bot → Token von @BotFather eintragen → „Mit Telegram verbinden (QR)" → scannen. Ab dann: alles, was du dem Bot schickst, landet automatisch einsortiert im Archiv
-4. **Chrome-Addon**: `chrome://extensions` → Entwicklermodus → „Entpackte Erweiterung laden" → Ordner `clients/chrome-extension`; in den Optionen Server-URL + API-Token (Studio → API-Tokens) eintragen
+4. **Chrome-Addon** installieren — siehe [Anleitung unten](#chrome-addon-installieren)
 
 **Gut zu wissen:** Ist der Rechner aus, hält Telegram gesendete Nachrichten ~24 Stunden
 in der Warteschlange — beim nächsten Start holt die App alles automatisch nach und
 meldet es im Studio.
+
+## Chrome-Addon installieren
+
+Speichert Webseiten, markierten Text und Bilder mit einem Klick oder per Rechtsklick-Menü.
+
+1. Repository liegt lokal vor (per `git clone` oder ZIP-Download → entpacken).
+   Wichtig: Der Ordner `clients/chrome-extension` muss dauerhaft liegen bleiben —
+   Chrome lädt die Erweiterung von dort.
+2. Chrome öffnen → Adresszeile: `chrome://extensions`
+3. Oben rechts **„Entwicklermodus"** einschalten
+4. **„Entpackte Erweiterung laden"** klicken → Ordner `clients/chrome-extension` auswählen
+5. Im Studio ein API-Token holen: **API-Tokens → Neues Token** → Token kopieren
+   (wird nur einmal angezeigt)
+6. Extension-Symbol in Chrome → Rechtsklick → **„Optionen"**:
+   - **Server-URL**: `http://localhost:8181` (bzw. dein `APP_PORT`)
+   - **Token**: das kopierte API-Token
+   - Speichern — der Verbindungstest meldet Erfolg
+
+Danach: Extension-Symbol anklicken speichert die aktuelle Seite; Rechtsklick auf
+Seite/Textauswahl/Bild → „… an Summarizer senden". Grünes ✓ am Symbol = gespeichert,
+rotes ! = Fehler (z. B. Server aus — dann Meldung prüfen und erneut senden).
+
+Andere Chromium-Browser (Edge, Brave, Vivaldi) funktionieren genauso
+(`edge://extensions` usw.). Firefox wird derzeit nicht unterstützt.
 
 ## Betrieb
 
