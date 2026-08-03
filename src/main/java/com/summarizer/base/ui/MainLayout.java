@@ -30,17 +30,22 @@ public class MainLayout extends AppLayout {
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final com.summarizer.base.JobProgressService jobs;
     private final com.summarizer.base.CurrentUser currentUser;
+    private final com.summarizer.ai.OllamaClient ollama;
     private final com.vaadin.flow.component.html.Span statusChip =
             new com.vaadin.flow.component.html.Span();
+    /** true sobald Chat- UND Embedding-Modell installiert sind — dann keine Checks mehr. */
+    private volatile boolean modelsReady = false;
 
     public MainLayout(AuthenticationContext authContext,
                       com.summarizer.settings.AppSettingsService settings,
                       org.springframework.jdbc.core.JdbcTemplate jdbc,
                       com.summarizer.base.JobProgressService jobs,
-                      com.summarizer.base.CurrentUser currentUser) {
+                      com.summarizer.base.CurrentUser currentUser,
+                      com.summarizer.ai.OllamaClient ollama) {
         this.jdbc = jdbc;
         this.jobs = jobs;
         this.currentUser = currentUser;
+        this.ollama = ollama;
         com.vaadin.flow.component.html.Div logo = new com.vaadin.flow.component.html.Div();
         logo.setText("S");
         logo.addClassName("s-logo");
@@ -144,6 +149,31 @@ public class MainLayout extends AppLayout {
         });
     }
 
+    /** Fehlende Pflicht-Modelle (Chat + Embedding), leer sobald alles installiert ist. */
+    private java.util.List<String> missingModels() {
+        if (modelsReady) {
+            return java.util.List.of();
+        }
+        try {
+            java.util.List<String> installed = ollama.listModels().stream()
+                    .map(com.summarizer.ai.OllamaClient.ModelInfo::name).toList();
+            java.util.List<String> missing = new java.util.ArrayList<>();
+            for (String required : java.util.List.of(ollama.chatModel(), ollama.embeddingModel())) {
+                boolean present = installed.stream().anyMatch(name -> name.equals(required)
+                        || name.equals(required + ":latest") || required.equals(name + ":latest"));
+                if (!present) {
+                    missing.add(required);
+                }
+            }
+            if (missing.isEmpty()) {
+                modelsReady = true;
+            }
+            return missing;
+        } catch (Exception e) {
+            return java.util.List.of();   // Ollama nicht erreichbar — meldet die System-Seite
+        }
+    }
+
     private void refreshStatus() {
         try {
             Integer active = jdbc.queryForObject("""
@@ -151,8 +181,17 @@ public class MainLayout extends AppLayout {
                     WHERE user_id = ? AND status IN ('PENDING', 'PROCESSING')
                     """, Integer.class, currentUser.id());
             StringBuilder text = new StringBuilder();
-            jobs.anyRunning().ifPresent(job -> text.append("🔄 ").append(job.label())
-                    .append(' ').append(job.done()).append('/').append(job.total()));
+            java.util.List<String> missing = missingModels();
+            if (!missing.isEmpty()) {
+                text.append(getTranslation("nav.modelsLoading", String.join(", ", missing)));
+            }
+            jobs.anyRunning().ifPresent(job -> {
+                if (!text.isEmpty()) {
+                    text.append("  ·  ");
+                }
+                text.append("🔄 ").append(job.label())
+                        .append(' ').append(job.done()).append('/').append(job.total());
+            });
             if (active != null && active > 0) {
                 if (!text.isEmpty()) {
                     text.append("  ·  ");
