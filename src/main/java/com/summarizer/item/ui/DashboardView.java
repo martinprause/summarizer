@@ -645,6 +645,11 @@ public class DashboardView extends HorizontalLayout {
         box.add(new Paragraph(getTranslation("dashboard.onboarding.step1")));
         box.add(new Paragraph(getTranslation("dashboard.onboarding.step2")));
         box.add(new Paragraph(getTranslation("dashboard.onboarding.step3")));
+        com.vaadin.flow.router.RouterLink telegram = new com.vaadin.flow.router.RouterLink(
+                getTranslation("dashboard.onboarding.telegramLink"),
+                com.summarizer.base.ui.SystemView.class);
+        telegram.getStyle().set("display", "block").set("margin-bottom", "0.3em");
+        box.add(telegram);
         box.add(new com.vaadin.flow.router.RouterLink(getTranslation("dashboard.onboarding.tokensLink"),
                 com.summarizer.token.ui.TokensView.class));
         return box;
