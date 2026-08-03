@@ -122,6 +122,25 @@ public class MainLayout extends AppLayout {
                 ui.access(() -> com.vaadin.flow.component.notification.Notification.show(
                         message, 10000,
                         com.vaadin.flow.component.notification.Notification.Position.BOTTOM_END)));
+        notifyBackgroundWork();
+    }
+
+    /** Einmaliger Hinweis beim Öffnen, wenn im Hintergrund noch verarbeitet wird
+     *  (z. B. Import-Rückstand nach Neustart oder Telegram-Nachholen). */
+    private void notifyBackgroundWork() {
+        try {
+            Integer pending = jdbc.queryForObject("""
+                    SELECT count(*) FROM items
+                    WHERE user_id = ? AND status IN ('PENDING', 'PROCESSING')
+                    """, Integer.class, currentUser.id());
+            if (pending != null && pending > 0) {
+                com.vaadin.flow.component.notification.Notification.show(
+                        getTranslation("nav.backgroundWork", pending), 8000,
+                        com.vaadin.flow.component.notification.Notification.Position.BOTTOM_END);
+            }
+        } catch (Exception ignored) {
+            // DB nicht erreichbar — Statusleiste meldet ohnehin
+        }
     }
 
     @Override

@@ -68,6 +68,7 @@ public class SystemView extends VerticalLayout {
 
         addTelegramSection(telegram, qrCodes, currentUser, settings);
         addLanguageSection(settings);
+        addImportSection(settings, currentUser);
         addAccessSection(settings, currentUser, users, passwordEncoder);
     }
 
@@ -91,6 +92,42 @@ public class SystemView extends VerticalLayout {
             com.vaadin.flow.component.UI.getCurrent().getPage().reload();
         });
         add(language);
+    }
+
+    /** Import: max. Links pro Lesezeichen-Import, für Admins einstellbar. */
+    private void addImportSection(com.summarizer.settings.AppSettingsService settings,
+                                  com.summarizer.base.CurrentUser currentUser) {
+        if (!"ADMIN".equals(currentUser.get().getRole())) {
+            return;
+        }
+        add(new com.vaadin.flow.component.html.H2(getTranslation("system.import.title")));
+        com.vaadin.flow.component.textfield.IntegerField limit =
+                new com.vaadin.flow.component.textfield.IntegerField(
+                        getTranslation("system.import.limit"));
+        limit.setMin(1);
+        limit.setMax(100000);
+        limit.setStepButtonsVisible(true);
+        limit.setWidth("260px");
+        limit.setHelperText(getTranslation("system.import.limitHelper"));
+        int current;
+        try {
+            current = Integer.parseInt(settings.get(
+                    com.summarizer.item.ui.DashboardView.IMPORT_LIMIT_KEY,
+                    String.valueOf(com.summarizer.item.ui.DashboardView.IMPORT_LIMIT_DEFAULT)));
+        } catch (NumberFormatException e) {
+            current = com.summarizer.item.ui.DashboardView.IMPORT_LIMIT_DEFAULT;
+        }
+        limit.setValue(current);
+        limit.addValueChangeListener(e -> {
+            if (!e.isFromClient() || e.getValue() == null || e.getValue() < 1) {
+                return;
+            }
+            settings.set(com.summarizer.item.ui.DashboardView.IMPORT_LIMIT_KEY,
+                    String.valueOf(e.getValue()));
+            com.vaadin.flow.component.notification.Notification.show(
+                    getTranslation("system.import.saved"));
+        });
+        add(limit);
     }
 
     /** Zugriff: Login an/aus — Standard ist ohne Login (rein lokaler Betrieb). */

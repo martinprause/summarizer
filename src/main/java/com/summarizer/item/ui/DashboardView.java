@@ -52,7 +52,9 @@ import java.util.List;
 public class DashboardView extends HorizontalLayout {
 
     private static final int PAGE_SIZE = 24;
-    private static final int IMPORT_LIMIT = 500;
+    /** Setting-Schlüssel: max. Links pro Lesezeichen-Import (System-View). */
+    public static final String IMPORT_LIMIT_KEY = "import.max-links";
+    public static final int IMPORT_LIMIT_DEFAULT = 2000;
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.systemDefault());
 
@@ -99,12 +101,16 @@ public class DashboardView extends HorizontalLayout {
 
     private final com.summarizer.item.TagService tags;
 
+    private final com.summarizer.settings.AppSettingsService settings;
+
     public DashboardView(ItemQueryService queries, ItemRepository itemRepository,
                          CategoryRepository categories, CategoryTreeService categoryTree,
                          FavoritesService favoritesService, IngestPipeline pipeline,
                          UserRepository userRepository, CurrentUser currentUser,
-                         com.summarizer.item.TagService tags) {
+                         com.summarizer.item.TagService tags,
+                         com.summarizer.settings.AppSettingsService settings) {
         this.tags = tags;
+        this.settings = settings;
         this.queries = queries;
         this.itemRepository = itemRepository;
         this.categoryTree = categoryTree;
@@ -410,10 +416,21 @@ public class DashboardView extends HorizontalLayout {
 
     // ---------- Bookmarks-Import (Chrome/Safari HTML-Export) ----------
 
+    /** Limit aus System-Einstellungen (import.max-links), Fallback 2000. */
+    private int importLimit() {
+        try {
+            return Math.max(1, Integer.parseInt(
+                    settings.get(IMPORT_LIMIT_KEY, String.valueOf(IMPORT_LIMIT_DEFAULT))));
+        } catch (NumberFormatException e) {
+            return IMPORT_LIMIT_DEFAULT;
+        }
+    }
+
     private void openImportDialog() {
+        int limit = importLimit();
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle(getTranslation("dashboard.import.dialogTitle"));
-        dialog.add(new Paragraph(getTranslation("dashboard.import.dialogText", IMPORT_LIMIT)));
+        dialog.add(new Paragraph(getTranslation("dashboard.import.dialogText", limit)));
 
         MemoryBuffer buffer = new MemoryBuffer();
         Upload upload = new Upload(buffer);
@@ -425,7 +442,7 @@ public class DashboardView extends HorizontalLayout {
                 List<Element> links = doc.select("a[href^=http]");
                 int imported = 0;
                 for (Element link : links) {
-                    if (imported >= IMPORT_LIMIT) {
+                    if (imported >= limit) {
                         break;
                     }
                     Item item = new Item(user.getId(), Item.Type.BOOKMARK);
@@ -438,8 +455,8 @@ public class DashboardView extends HorizontalLayout {
                 }
                 dialog.close();
                 Notification.show(getTranslation("dashboard.import.success", imported)
-                        + (links.size() > IMPORT_LIMIT
-                                ? " " + getTranslation("dashboard.import.skipped", links.size() - IMPORT_LIMIT)
+                        + (links.size() > limit
+                                ? " " + getTranslation("dashboard.import.skipped", links.size() - limit)
                                 : ""));
                 reload();
             } catch (Exception ex) {
