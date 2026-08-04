@@ -8,6 +8,10 @@ WORKDIR /build
 COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
 
+# npm-Manifeste mitkopieren — sonst erzeugt Vaadin eine frische package.json
+# ohne devDependencies (sass-embedded fuer frappe-gantt) und der Vite-Build bricht
+COPY package.json package-lock.json tsconfig.json types.d.ts vite.config.ts ./
+
 # Quellcode + Frontend-Ressourcen
 COPY src src
 
