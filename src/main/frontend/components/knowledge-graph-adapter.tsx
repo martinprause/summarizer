@@ -17,7 +17,7 @@ import dagre from '@dagrejs/dagre';
 import React, { type ReactElement, useCallback, useEffect, useState } from 'react';
 
 type GNode = { id: string; label: string; type: string; degree: number; color: string };
-type GEdge = { id: string; source: string; target: string; label: string };
+type GEdge = { id: string; source: string; target: string; label: string; weight: number };
 
 const FALLBACK_COLOR = '#546e7a';
 
@@ -96,7 +96,11 @@ class KnowledgeGraphElement extends ReactAdapterElement {
                 label: e.label || undefined,
                 labelStyle: { fontSize: 10 },
                 markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
-                style: { stroke: '#90a4ae' },
+                // Kantendicke = Kookkurrenz: je mehr gemeinsame Inhalte, desto dicker
+                style: {
+                    stroke: (e.weight ?? 1) >= 3 ? '#546e7a' : '#90a4ae',
+                    strokeWidth: Math.min(1 + (e.weight ?? 1) * 0.8, 5),
+                },
             })));
         }, [gNodes, gEdges]);
 

@@ -33,12 +33,14 @@ public class GraphExtractionService {
     private final com.summarizer.item.TagService tags;
     private final com.summarizer.base.JobProgressService progress;
     private final com.summarizer.settings.AppSettingsService settings;
+    private final com.summarizer.ai.OllamaClient ollama;
 
     public GraphExtractionService(LlmRouter llm, GraphService graph, ItemRepository items,
                                   com.summarizer.category.CategoryRepository categories,
                                   com.summarizer.item.TagService tags,
                                   com.summarizer.settings.AppSettingsService settings,
-                                  com.summarizer.base.JobProgressService progress) {
+                                  com.summarizer.base.JobProgressService progress,
+                                  com.summarizer.ai.OllamaClient ollama) {
         this.settings = settings;
         this.llm = llm;
         this.graph = graph;
@@ -46,6 +48,7 @@ public class GraphExtractionService {
         this.categories = categories;
         this.tags = tags;
         this.progress = progress;
+        this.ollama = ollama;
     }
 
     public void extract(Item item) {
@@ -86,35 +89,40 @@ public class GraphExtractionService {
     public static final String PROMPT_KEY = "graph.prompt";
 
     private static final String DEFAULT_PROMPT = """
-                Extrahiere die wichtigsten Themen, Entitäten und ihre Beziehungen aus dem Text.
+                Extrahiere NUR die zentralen, konkreten Begriffe aus dem Text — Qualität vor Menge.
 
-                Was ist eine Entität:
-                - Substantive und Eigennamen: Personen, Firmen, Produkte, Technologien,
-                  Algorithmen, Verfahren, Orte, Fachbegriffe, Themen.
-                - Auch übergeordnete Themen nennen (z. B. "Sprachmodell", "Photovoltaik",
-                  "Italienische Küche") — sie verbinden Inhalte miteinander.
+                Eine Entität ist AUSSCHLIESSLICH:
+                - ein Eigenname (Person, Firma, Produkt, Ort, Projekt), oder
+                - ein konkreter Fachbegriff (Technologie, Algorithmus, Methode, Gericht, Krankheit, Gesetz).
 
                 NIEMALS als Entität:
-                - Verben oder Partizipien (erstellt, gestellt, verwendet, zeigt)
-                - inhaltsleere Wörter (Zweck, Sache, Thema, Beispiel, Inhalt, Text)
-                - ganze Sätze oder Beschreibungen
+                - Oberbegriffe und Allerweltswörter (Software, Internet, Technologie, System,
+                  Anwendung, Lösung, Projekt, Prozess, Funktion, Tool, Modell, Daten)
+                - Verben, Adjektive, Partizipien, ganze Sätze
+                - alles, was nur einmal beiläufig erwähnt wird
+
+                Schreibweise normalisieren:
+                - Singular, offizielle Schreibweise ("PostgreSQL", nicht "postgres" oder "Postgres-DB")
+                - Abkürzung nur, wenn sie gebräuchlicher ist als der volle Name (z. B. "KI")
 
                 Typen:
                   PERSON  = Menschen
                   ORG     = Firmen, Organisationen, Projekte
-                  TECH    = Technologien, Produkte, Algorithmen, Verfahren, Werkzeuge
+                  TECH    = Technologien, Produkte, Algorithmen, Werkzeuge
                   ORT     = Orte, Länder, Regionen
-                  CONCEPT = Themen, Fachgebiete, abstrakte Begriffe
+                  CONCEPT = konkrete Fachbegriffe und Themen
 
-                Regeln:
-                - 5 bis 10 Entitäten, 5 bis 10 Beziehungen.
-                - Jede Entität soll ein kurzer Begriff sein (1-4 Wörter), keine Erklärung.
-                - Beziehungen zwischen den genannten Entitäten, mit aussagekräftigem Verb
-                  (z. B. "ist Teil von", "wird trainiert mit", "gehört zum Thema").
+                Beziehungen — NUR diese Formulierungen verwenden:
+                  "ist Teil von" | "nutzt" | "arbeitet bei" | "gehört zu" | "vergleichbar mit"
 
-                Antworte NUR mit Zeilen in diesen zwei Formaten (keine Erklärung):
+                Menge:
+                - Höchstens 5 Entitäten. Lieber 2 gute als 5 schwache. Kein Zwang zur Höchstzahl.
+                - Höchstens 4 Beziehungen, nur zwischen oben genannten Entitäten.
+                - Gibt der Text nichts her: nur die Zeile NONE ausgeben.
+
+                Antworte NUR mit Zeilen in diesen Formaten (keine Erklärung):
                 ENTITY|Name|TYP|kurze Beschreibung
-                REL|Name der Quelle|Name des Ziels|Beziehung in 2-5 Worten
+                REL|Name der Quelle|Name des Ziels|Beziehung
 
                 {{GUARD}}
 
@@ -184,8 +192,63 @@ public class GraphExtractionService {
             extract(item);
             progress.update(key, ++done);
         }
-        progress.finish(key, "Graph neu aufgebaut aus " + done + " Inhalten");
-        log.info("Graph-Rebuild für User {}: {} Items verarbeitet", userId, done);
+        int merged = mergeSimilarEntities(userId);
+        progress.finish(key, "Graph neu aufgebaut aus " + done + " Inhalten"
+                + (merged > 0 ? ", " + merged + " Duplikate zusammengeführt" : ""));
+        log.info("Graph-Rebuild für User {}: {} Items verarbeitet, {} Entitäten gemerged",
+                userId, done, merged);
+    }
+
+    /**
+     * Duplikate per Embedding-Ähnlichkeit zusammenführen ("Postgres" = "PostgreSQL").
+     * Läuft nach jedem Rebuild; der Knoten mit mehr Verbindungen gewinnt.
+     */
+    public int mergeSimilarEntities(Long userId) {
+        try {
+            List<GraphService.Entity> all = graph.entities(userId);
+            if (all.size() < 2 || all.size() > 400) {
+                return 0;   // zu klein bzw. zu teuer — dann nur exakte Dedup (DB-Index)
+            }
+            List<List<Double>> vectors = ollama.embed(
+                    all.stream().map(GraphService.Entity::name).toList());
+            if (vectors == null || vectors.size() != all.size()) {
+                return 0;
+            }
+            // bereits gemergte Knoten nicht erneut anfassen (Union-Find light)
+            java.util.Set<Long> gone = new java.util.HashSet<>();
+            int merged = 0;
+            for (int i = 0; i < all.size(); i++) {
+                for (int j = i + 1; j < all.size(); j++) {
+                    GraphService.Entity winner = all.get(i);   // Liste ist nach Grad sortiert
+                    GraphService.Entity loser = all.get(j);
+                    if (gone.contains(winner.id()) || gone.contains(loser.id())) {
+                        continue;
+                    }
+                    if (cosine(vectors.get(i), vectors.get(j)) >= 0.93) {
+                        graph.mergeEntities(userId, winner.id(), loser.id());
+                        gone.add(loser.id());
+                        merged++;
+                        log.info("Graph-Dedup: '{}' -> '{}'", loser.name(), winner.name());
+                    }
+                }
+            }
+            return merged;
+        } catch (Exception e) {
+            log.warn("Entitäten-Dedup übersprungen: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    private double cosine(List<Double> a, List<Double> b) {
+        double dot = 0;
+        double normA = 0;
+        double normB = 0;
+        for (int i = 0; i < Math.min(a.size(), b.size()); i++) {
+            dot += a.get(i) * b.get(i);
+            normA += a.get(i) * a.get(i);
+            normB += b.get(i) * b.get(i);
+        }
+        return normA == 0 || normB == 0 ? 0 : dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
     /**
@@ -240,7 +303,16 @@ public class GraphExtractionService {
             "zweck", "sache", "thema", "themen", "beispiel", "inhalt", "text", "sonstiges",
             "erstellt", "gestellt", "verwendet", "zeigt", "beschreibt", "enthält", "nutzt",
             "information", "informationen", "daten", "sonstige", "allgemein", "diverses",
-            "bild", "foto", "datei", "dokument", "webseite", "artikel", "notiz");
+            "bild", "foto", "datei", "dokument", "webseite", "artikel", "notiz",
+            // generische Oberbegriffe, die alles mit allem verbinden
+            "software", "internet", "technologie", "technologien", "system", "systeme",
+            "anwendung", "anwendungen", "lösung", "lösungen", "projekt", "projekte",
+            "prozess", "prozesse", "funktion", "funktionen", "tool", "tools", "modell",
+            "modelle", "methode", "methoden", "plattform", "website", "seite", "produkt",
+            "produkte", "service", "dienst", "app", "computer", "programm", "none",
+            // Format-Artefakte: LLM gibt manchmal Spaltennamen/Typen als Entitaet aus
+            "entity", "rel", "name", "typ", "type", "quelle", "ziel", "beschreibung",
+            "person", "org", "tech", "ort", "concept", "foto", "domain", "beziehung");
 
     /**
      * Entität einer REL-Zeile auflösen. Kleine Modelle schreiben Namen leicht

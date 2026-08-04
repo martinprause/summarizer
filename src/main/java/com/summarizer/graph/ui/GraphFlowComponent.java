@@ -23,7 +23,8 @@ public class GraphFlowComponent extends ReactAdapterComponent implements HasSize
                             String color) implements Serializable {
     }
 
-    public record GraphEdge(String id, String source, String target, String label) implements Serializable {
+    public record GraphEdge(String id, String source, String target, String label,
+                            int weight) implements Serializable {
     }
 
     @FunctionalInterface

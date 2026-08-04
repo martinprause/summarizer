@@ -48,6 +48,11 @@ public class GraphView extends VerticalLayout {
     private final Div legend = new Div();
     private java.util.Set<Long> filteredEntityIds;   // null = kein Filter
     private final java.util.Set<String> hiddenCategories = new java.util.HashSet<>();
+    private final com.vaadin.flow.component.select.Select<Integer> topN =
+            new com.vaadin.flow.component.select.Select<>();
+    private final com.vaadin.flow.component.checkbox.Checkbox strongEdges =
+            new com.vaadin.flow.component.checkbox.Checkbox();
+    private boolean strongEdgesInitialized;
 
     public GraphView(GraphService graph, GraphExtractionService extraction, CurrentUser currentUser,
                      com.summarizer.base.JobProgressService jobs,
@@ -96,8 +101,23 @@ public class GraphView extends VerticalLayout {
             refresh();
         });
 
+        // Detailgrad: nur die zentralsten Knoten zeigen (0 = alle)
+        topN.setItems(30, 60, 100, 0);
+        topN.setValue(30);
+        topN.setItemLabelGenerator(n -> n == 0
+                ? getTranslation("graph.topn.all") : "Top " + n);
+        topN.setWidth("110px");
+        topN.addValueChangeListener(e -> refresh());
+
+        strongEdges.setLabel(getTranslation("graph.strongEdges"));
+        strongEdges.addValueChangeListener(e -> {
+            if (e.isFromClient()) {
+                refresh();
+            }
+        });
+
         HorizontalLayout toolbar = new HorizontalLayout(backfill, refresh, editPrompt,
-                filterField, applyFilter, clearFilter);
+                filterField, applyFilter, clearFilter, topN, strongEdges);
         toolbar.setAlignItems(Alignment.END);
         toolbar.getStyle().set("flex-wrap", "wrap");
         add(toolbar);
@@ -277,16 +297,36 @@ public class GraphView extends VerticalLayout {
         entityGrid.setItems(entities);
         relationGrid.setItems(relations);
 
+        // Beim ersten Laden: "starke Kanten" automatisch an, wenn der Graph gross ist
+        if (!strongEdgesInitialized) {
+            strongEdgesInitialized = true;
+            strongEdges.setValue(relations.size() > 80);
+        }
+
+        // Detailgrad: Liste ist nach Grad sortiert — Top-N zentrale Knoten behalten
+        Integer limit = topN.getValue();
+        if (limit != null && limit > 0 && entities.size() > limit) {
+            entities = entities.subList(0, limit);
+        }
+        java.util.Set<Long> visibleForGraph = entities.stream()
+                .map(GraphService.Entity::id)
+                .collect(java.util.stream.Collectors.toSet());
+        List<GraphService.Relation> graphRelations = relations.stream()
+                .filter(r -> visibleForGraph.contains(r.sourceId())
+                        && visibleForGraph.contains(r.targetId()))
+                .filter(r -> !Boolean.TRUE.equals(strongEdges.getValue()) || r.weight() >= 2)
+                .toList();
+
         List<GraphFlowComponent.GraphNode> nodes = entities.stream()
                 .map(e -> new GraphFlowComponent.GraphNode(
                         String.valueOf(e.id()), e.name(), e.type(), e.degree(), colorFor(e)))
                 .toList();
         List<GraphFlowComponent.GraphEdge> edges = new java.util.ArrayList<>();
         int index = 0;
-        for (GraphService.Relation r : relations) {
+        for (GraphService.Relation r : graphRelations) {
             edges.add(new GraphFlowComponent.GraphEdge("e" + index++,
                     String.valueOf(r.sourceId()), String.valueOf(r.targetId()),
-                    r.relation() == null ? "" : r.relation()));
+                    r.relation() == null ? "" : r.relation(), r.weight()));
         }
         flow.setGraph(nodes, edges);
     }

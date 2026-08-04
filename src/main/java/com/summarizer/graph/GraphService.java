@@ -23,7 +23,7 @@ public class GraphService {
     }
 
     public record Relation(long sourceId, String sourceName, String relation,
-                           long targetId, String targetName) {
+                           long targetId, String targetName, int weight) {
     }
 
     @Transactional
@@ -124,17 +124,54 @@ public class GraphService {
                 """.formatted(placeholders), Long.class, params));
     }
 
+    /** Beziehungen mit Gewicht = Anzahl gemeinsamer Inhalte (Kookkurrenz). */
     public List<Relation> relations(Long userId) {
         return jdbc.query("""
-                SELECT r.source_id, s.name AS source_name, r.relation, r.target_id, t.name AS target_name
+                SELECT r.source_id, s.name AS source_name, r.relation, r.target_id,
+                       t.name AS target_name, COALESCE(co.w, 1) AS weight
                 FROM entity_relations r
                 JOIN entities s ON s.id = r.source_id
                 JOIN entities t ON t.id = r.target_id
+                LEFT JOIN (
+                    SELECT LEAST(ie1.entity_id, ie2.entity_id) AS a,
+                           GREATEST(ie1.entity_id, ie2.entity_id) AS b,
+                           count(DISTINCT ie1.item_id) AS w
+                    FROM item_entities ie1
+                    JOIN item_entities ie2 ON ie1.item_id = ie2.item_id
+                                          AND ie1.entity_id < ie2.entity_id
+                    GROUP BY 1, 2
+                ) co ON co.a = LEAST(r.source_id, r.target_id)
+                    AND co.b = GREATEST(r.source_id, r.target_id)
                 WHERE r.user_id = ?
                 ORDER BY s.name
                 """, (rs, i) -> new Relation(rs.getLong("source_id"), rs.getString("source_name"),
-                        rs.getString("relation"), rs.getLong("target_id"), rs.getString("target_name")),
+                        rs.getString("relation"), rs.getLong("target_id"), rs.getString("target_name"),
+                        rs.getInt("weight")),
                 userId);
+    }
+
+    /** Verlierer-Entität in Gewinner aufgehen lassen (Dedup nach dem Rebuild). */
+    @Transactional
+    public void mergeEntities(Long userId, long winnerId, long loserId) {
+        jdbc.update("""
+                UPDATE item_entities SET entity_id = ?
+                WHERE entity_id = ? AND NOT EXISTS (
+                    SELECT 1 FROM item_entities ie2
+                    WHERE ie2.item_id = item_entities.item_id AND ie2.entity_id = ?)
+                """, winnerId, loserId, winnerId);
+        jdbc.update("DELETE FROM item_entities WHERE entity_id = ?", loserId);
+        jdbc.update("UPDATE entity_relations SET source_id = ? WHERE source_id = ? AND user_id = ?",
+                winnerId, loserId, userId);
+        jdbc.update("UPDATE entity_relations SET target_id = ? WHERE target_id = ? AND user_id = ?",
+                winnerId, loserId, userId);
+        jdbc.update("DELETE FROM entity_relations WHERE user_id = ? AND source_id = target_id", userId);
+        // doppelte Kanten nach dem Umhaengen entfernen
+        jdbc.update("""
+                DELETE FROM entity_relations a USING entity_relations b
+                WHERE a.user_id = ? AND b.user_id = a.user_id AND a.id > b.id
+                  AND a.source_id = b.source_id AND a.target_id = b.target_id
+                """, userId);
+        jdbc.update("DELETE FROM entities WHERE id = ? AND user_id = ?", loserId, userId);
     }
 
     /** Entitäten, deren Name in der Frage vorkommt (Graph-Einstiegspunkte fürs Retrieval). */
@@ -170,7 +207,7 @@ public class GraphService {
                 LIMIT 30
                 """.formatted(placeholders, placeholders),
                 (rs, i) -> new Relation(rs.getLong("source_id"), rs.getString("source_name"),
-                        rs.getString("relation"), rs.getLong("target_id"), rs.getString("target_name")),
+                        rs.getString("relation"), rs.getLong("target_id"), rs.getString("target_name"), 1),
                 params);
     }
 
