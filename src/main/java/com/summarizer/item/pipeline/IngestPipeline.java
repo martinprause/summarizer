@@ -301,7 +301,10 @@ public class IngestPipeline {
         List<String> existingTags = tags.allTagNames(item.getUserId());
 
         boolean transcript = isTranscript(item);
-        int maxBullets = transcript ? 10 : 15;
+        // Massen-Import: kürzere Beschreibungen (Ausgabe-Tokens kosten am meisten) —
+        // "Alle neu zusammenfassen" kann später die volle Länge nachziehen
+        boolean bulk = items.countByStatus(Item.Status.PENDING) > BULK_THRESHOLD;
+        int maxBullets = bulk ? 8 : (transcript ? 10 : 15);
         String prompt = """
                 Analysiere den folgenden Inhalt.
 
@@ -329,12 +332,12 @@ public class IngestPipeline {
                 Inhalt:
                 %s
                 """.formatted(
-                transcript ? "maximal 10" : "10 bis 15",
+                bulk ? "maximal 8" : (transcript ? "maximal 10" : "10 bis 15"),
                 existingTags.isEmpty() ? "(noch keine vorhanden)" : String.join(", ", existingTags),
                 userCategories.isEmpty() ? "(keine Kategorien definiert)"
                         : classification.categoryListing(userCategories),
                 com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
-                com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 5000));
+                com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 3000));
 
         // Structured Output: Ollama erzwingt valides JSON nach diesem Schema;
         // enum zwingt category_path auf einen existierenden Pfad

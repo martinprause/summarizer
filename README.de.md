@@ -156,7 +156,7 @@ Tags, Graph und Chat als JSON plus Original-Dateien und Snapshots.
 | `APP_IMAGE` | Alternatives App-Image | `mtprause/summarizer:latest` |
 | `ADMIN_PASSWORD` | Admin-Passwort (leer = Standard `admin`, im Studio änderbar) | - |
 | `CHAT_MODEL` | Ollama-Chat-Modell (Erststart-Download) | `qwen3.5:4b` |
-| `EMBEDDING_MODEL` | Embedding-Modell (mehrsprachig, 1024 Dimensionen) | `qwen3-embedding:0.6b` |
+| `EMBEDDING_MODEL` | Embedding-Modell (mehrsprachig, 1024 Dimensionen) | `bge-m3` |
 | `EMBEDDING_DIM` | Muss zum Embedding-Modell passen | `768` |
 | `WHISPER_MODEL` | Whisper-Größe (tiny/base/small/medium) | `small` |
 

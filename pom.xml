@@ -13,7 +13,7 @@
 
     <groupId>com.summarizer</groupId>
     <artifactId>summarizer</artifactId>
-    <version>0.3.1</version>
+    <version>0.3.2</version>
     <name>Summarizer Studio</name>
     <description>Persönliches Wissens-Studio: Sammeln, Einsortieren, Suchen</description>
 

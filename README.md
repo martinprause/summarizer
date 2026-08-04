@@ -157,7 +157,7 @@ in Docker Desktop - take a backup first.
 | `APP_IMAGE` | Alternative app image | `mtprause/summarizer:latest` |
 | `ADMIN_PASSWORD` | Admin password (empty = default `admin`, changeable in the studio) | - |
 | `CHAT_MODEL` | Ollama chat model (downloaded on first start) | `qwen3.5:4b` |
-| `EMBEDDING_MODEL` | Embedding model (multilingual, 1024 dimensions) | `qwen3-embedding:0.6b` |
+| `EMBEDDING_MODEL` | Embedding model (multilingual, 1024 dimensions) | `bge-m3` |
 | `EMBEDDING_DIM` | Must match the embedding model | `768` |
 | `WHISPER_MODEL` | Whisper size (tiny/base/small/medium) | `small` |
 

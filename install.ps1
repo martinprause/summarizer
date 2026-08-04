@@ -100,7 +100,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:4b}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       FILES_DIR: /data/files
@@ -135,7 +135,7 @@ services:
     command: >
       "until ollama list >/dev/null 2>&1; do sleep 2; done &&
        ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
-       ollama pull ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
+       ollama pull ${EMBEDDING_MODEL:-bge-m3}"
     restart: "no"
 
   # Whisper: Audio-Transkription (Sprachnachrichten aus der App)
@@ -182,7 +182,7 @@ if (-not (Test-Path ".env")) {
     Write-Host ""
     # Standard-Modelle: mehrsprachig, laufen auch auf kleinen GPUs gemeinsam im VRAM.
     # Beides im Studio unter "KI-Modelle" änderbar.
-    $embedModel = "qwen3-embedding:0.6b"; $embedDim = 1024
+    $embedModel = "bge-m3"; $embedDim = 1024
     $chatModel = "qwen3.5:4b"
     Write-Host "Modelle: Chat $chatModel, Embeddings $embedModel (änderbar im Studio unter 'KI-Modelle')"
 

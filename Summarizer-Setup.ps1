@@ -228,7 +228,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:4b}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       FILES_DIR: /data/files
@@ -263,7 +263,7 @@ services:
     command: >
       "until ollama list >/dev/null 2>&1; do sleep 2; done &&
        ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
-       ollama pull ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
+       ollama pull ${EMBEDDING_MODEL:-bge-m3}"
     restart: "no"
 
   # Whisper: Audio-Transkription (Sprachnachrichten aus der App)
@@ -453,7 +453,7 @@ start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File
         Set-Status "Schreibe Konfiguration ..." 24
         $envExists = Test-Path ".env"
         # Standard-Modelle: mehrsprachig, laufen auch auf kleinen GPUs gemeinsam im VRAM
-        $embed = "qwen3-embedding:0.6b"; $dim = 1024
+        $embed = "bge-m3"; $dim = 1024
         $chat = "qwen3.5:4b"
         Write-Log "Modelle: Chat $chat, Embeddings $embed (änderbar im Studio unter 'KI-Modelle')"
         $ollamaUrl = if ($llmBox.SelectedIndex -eq 0) { "http://ollama:11434" }

@@ -18,9 +18,16 @@ public class TagService {
         this.jdbc = jdbc;
     }
 
+    /** Die 40 meistgenutzten Tags — als Vokabular-Vorschlag in LLM-Prompts. */
     public List<String> allTagNames(Long userId) {
-        return jdbc.queryForList(
-                "SELECT name FROM tags WHERE user_id = ? ORDER BY name LIMIT 40", String.class, userId);
+        return jdbc.queryForList("""
+                SELECT t.name FROM tags t
+                LEFT JOIN item_tags it ON it.tag_id = t.id
+                WHERE t.user_id = ?
+                GROUP BY t.name
+                ORDER BY count(it.item_id) DESC, t.name
+                LIMIT 40
+                """, String.class, userId);
     }
 
     /** Alle Tags des Users — fuer die Tag-Suche im Dashboard. */
