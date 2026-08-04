@@ -97,9 +97,11 @@ public class CategoriesView extends VerticalLayout {
             dot.getStyle().set("color", category.getColor() == null || category.getColor().isBlank()
                     ? "#78909c" : category.getColor());
             return new Span(dot, new Span(category.getName()));
-        }).setHeader(getTranslation("categories.column.name")).setAutoWidth(true).setFlexGrow(0);
+        }).setHeader(getTranslation("categories.column.name"))
+                .setWidth("240px").setFlexGrow(0).setResizable(true);
         tree.addColumn(Category::getDescription)
-                .setHeader(getTranslation("categories.column.description")).setFlexGrow(1);
+                .setHeader(getTranslation("categories.column.description"))
+                .setFlexGrow(1).setResizable(true);
         tree.addComponentColumn(category -> {
             Button child = new Button(getTranslation("categories.addChild"), e -> openEditor(null, category));
             child.addThemeVariants(ButtonVariant.LUMO_SMALL);
@@ -112,7 +114,8 @@ public class CategoriesView extends VerticalLayout {
             Button delete = new Button(getTranslation("categories.delete"), e -> confirmDelete(category));
             delete.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR);
             return new HorizontalLayout(child, edit, aiChildren, delete);
-        }).setHeader(getTranslation("categories.column.actions")).setAutoWidth(true).setFlexGrow(0);
+        }).setHeader(getTranslation("categories.column.actions"))
+                .setAutoWidth(true).setFlexGrow(0).setResizable(true);
 
         tree.setRowsDraggable(true);
         tree.setDropMode(GridDropMode.ON_TOP_OR_BETWEEN);
@@ -463,14 +466,14 @@ public class CategoriesView extends VerticalLayout {
             name.setWidthFull();
             name.addValueChangeListener(e -> node.name = e.getValue());
             return name;
-        }).setHeader(getTranslation("categories.ai.column.name")).setFlexGrow(2);
+        }).setHeader(getTranslation("categories.ai.column.name")).setFlexGrow(2).setResizable(true);
         proposalTree.addComponentColumn(node -> {
             TextField description = new TextField();
             description.setValue(node.description == null ? "" : node.description);
             description.setWidthFull();
             description.addValueChangeListener(e -> node.description = e.getValue());
             return description;
-        }).setHeader(getTranslation("categories.ai.column.description")).setFlexGrow(3);
+        }).setHeader(getTranslation("categories.ai.column.description")).setFlexGrow(3).setResizable(true);
         proposalTree.addComponentColumn(node -> {
             Button remove = new Button("✕", e -> {
                 if (node.parent == null) {
