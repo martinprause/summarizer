@@ -479,7 +479,13 @@ APP_PORT=$port
 OLLAMA_PORT=$ollamaPort
 WHISPER_MODEL=small
 "@ | ForEach-Object { if (-not $envExists) { $_ | Out-File -Encoding utf8 ".env" } }
-        if ($envExists) { Write-Log ".env existiert bereits - Konfiguration unverändert." }
+        if ($envExists) {
+            Write-Log ".env existiert bereits - Konfiguration unverändert."
+            $envRaw = Get-Content ".env" -Raw
+            $chatCfg = if ($envRaw -match "CHAT_MODEL=(\S+)") { $Matches[1] } else { "?" }
+            $embedCfg = if ($envRaw -match "EMBEDDING_MODEL=(\S+)") { $Matches[1] } else { "?" }
+            Write-Log "Konfigurierte Modelle: Chat $chatCfg, Embeddings $embedCfg (ändern: .env oder Studio -> KI-Modelle)"
+        }
 
         # 3b. GPU einmalig erkennen: nutzbare NVIDIA-GPU -> Ollama mit GPU starten
         if ((Get-Content ".env" -Raw) -notmatch "OLLAMA_GPU=") {

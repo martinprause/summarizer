@@ -227,6 +227,11 @@ WHISPER_MODEL=small
     Write-Host ".env geschrieben." -ForegroundColor Green
 } else {
     Write-Host ".env existiert bereits - verwende bestehende Konfiguration."
+    $envRaw = Get-Content ".env" -Raw
+    $chatCfg = if ($envRaw -match "CHAT_MODEL=(\S+)") { $Matches[1] } else { "?" }
+    $embedCfg = if ($envRaw -match "EMBEDDING_MODEL=(\S+)") { $Matches[1] } else { "?" }
+    Write-Host "Konfigurierte Modelle: Chat $chatCfg, Embeddings $embedCfg"
+    Write-Host "(ändern: .env bearbeiten oder im Studio unter 'KI-Modelle')"
 }
 
 # --- 2b. GPU einmalig erkennen: nutzbare NVIDIA-GPU -> Ollama mit GPU starten ---

@@ -196,6 +196,8 @@ EOF
     echo ".env geschrieben."
 else
     echo ".env existiert bereits - verwende bestehende Konfiguration."
+    echo "Konfigurierte Modelle: Chat $(grep -oP '^CHAT_MODEL=\K.*' .env 2>/dev/null || echo '?'), Embeddings $(grep -oP '^EMBEDDING_MODEL=\K.*' .env 2>/dev/null || echo '?')"
+    echo "(ändern: .env bearbeiten oder im Studio unter 'KI-Modelle')"
 fi
 
 # --- 2b. GPU einmalig erkennen: nutzbare NVIDIA-GPU -> Ollama mit GPU starten ---
