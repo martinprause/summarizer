@@ -32,8 +32,10 @@ public class WelcomeView extends VerticalLayout {
                 WHERE i.user_id = ?""", currentUser.id());
         long entities = count(jdbc, "SELECT count(*) FROM entities WHERE user_id = ?", currentUser.id());
         long categories = count(jdbc, "SELECT count(*) FROM categories WHERE user_id = ?", currentUser.id());
+        long openTasks = count(jdbc,
+                "SELECT count(*) FROM tasks WHERE user_id = ? AND status <> 'DONE'", currentUser.id());
 
-        add(new Html(hero(items, chunks, entities, categories)));
+        add(new Html(hero(items, chunks, entities, categories, openTasks)));
         add(new Html(features()));
         add(new Html(pipeline()));
         add(new Html(footer()));
@@ -50,7 +52,7 @@ public class WelcomeView extends VerticalLayout {
 
     // ---------- Abschnitte ----------
 
-    private String hero(long items, long chunks, long entities, long categories) {
+    private String hero(long items, long chunks, long entities, long categories, long openTasks) {
         return """
                 <section class="w-hero">
                   <div class="w-hero-inner">
@@ -64,11 +66,13 @@ public class WelcomeView extends VerticalLayout {
                       <div class="w-stat"><b>%d</b><span>%s</span></div>
                       <div class="w-stat"><b>%d</b><span>%s</span></div>
                       <div class="w-stat"><b>%d</b><span>%s</span></div>
+                      <div class="w-stat"><b>%d</b><span>%s</span></div>
                     </div>
                     <div class="w-cta">
                       <a class="w-btn w-btn-primary" href="/" router-link>%s</a>
                       <a class="w-btn" href="/chat" router-link>%s</a>
                       <a class="w-btn" href="/graph" router-link>%s</a>
+                      <a class="w-btn" href="/tasks" router-link>%s</a>
                     </div>
                   </div>
                 </section>
@@ -80,9 +84,11 @@ public class WelcomeView extends VerticalLayout {
                 chunks, getTranslation("welcome.hero.stat.chunks"),
                 entities, getTranslation("welcome.hero.stat.entities"),
                 categories, getTranslation("welcome.hero.stat.categories"),
+                openTasks, getTranslation("welcome.hero.stat.tasks"),
                 getTranslation("welcome.hero.cta.dashboard"),
                 getTranslation("welcome.hero.cta.chat"),
-                getTranslation("welcome.hero.cta.graph"));
+                getTranslation("welcome.hero.cta.graph"),
+                getTranslation("welcome.hero.cta.tasks"));
     }
 
     private String features() {
@@ -96,6 +102,9 @@ public class WelcomeView extends VerticalLayout {
             new Feature("🕸", getTranslation("welcome.feature.graph.title"),
                 getTranslation("welcome.feature.graph.text"), "graph",
                 getTranslation("welcome.feature.graph.link")),
+            new Feature("✅", getTranslation("welcome.feature.tasks.title"),
+                getTranslation("welcome.feature.tasks.text"), "tasks",
+                getTranslation("welcome.feature.tasks.link")),
             new Feature("🗂", getTranslation("welcome.feature.categories.title"),
                 getTranslation("welcome.feature.categories.text"), "categories",
                 getTranslation("welcome.feature.categories.link")),
