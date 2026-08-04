@@ -13,7 +13,8 @@ erzeugen sie selbst. Das Repository braucht nur, wer Chrome-Addon oder Quellcode
 ## Windows
 
 Am einfachsten: **`Summarizer-Setup.exe`** doppelklicken - grafischer Assistent
-(Ordnerwahl, Sprache, LLM, Whisper-Option, Fortschritt) inkl. Desktop-Verknüpfung.
+(Ordnerwahl, Sprache, LLM, Fortschritt) inkl. Desktop-Verknüpfung.
+Audio-Transkription (Whisper) wird immer mitinstalliert.
 
 Alternativ per Skript:
 

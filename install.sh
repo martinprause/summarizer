@@ -3,24 +3,24 @@
 set -euo pipefail
 echo "=== Summarizer Installation ==="
 
-# --- 1. Docker pruefen / installieren ---
+# --- 1. Docker prüfen / installieren ---
 if ! command -v docker >/dev/null 2>&1; then
     if [[ "$(uname)" == "Darwin" ]]; then
         echo "Docker fehlt. Installation (braucht Homebrew): brew install --cask docker"
-        echo "Danach Docker.app starten und dieses Skript erneut ausfuehren."
+        echo "Danach Docker.app starten und dieses Skript erneut ausführen."
         exit 1
     else
         echo "Docker fehlt - installiere via get.docker.com ..."
         curl -fsSL https://get.docker.com | sh
         sudo usermod -aG docker "$USER" || true
-        echo "Ggf. neu einloggen (docker-Gruppe), dann Skript erneut ausfuehren."
+        echo "Ggf. neu einloggen (docker-Gruppe), dann Skript erneut ausführen."
     fi
 fi
-docker info >/dev/null 2>&1 || { echo "Docker-Engine laeuft nicht - bitte starten."; exit 1; }
+docker info >/dev/null 2>&1 || { echo "Docker-Engine läuft nicht - bitte starten."; exit 1; }
 echo "Docker OK."
 
 # --- 1b. docker-compose.yml erzeugen, falls nicht vorhanden (Ein-Datei-Installation) ---
-# Inhalt gespiegelt aus docker-compose.yml im Repo - bei Aenderungen synchron halten.
+# Inhalt gespiegelt aus docker-compose.yml im Repo - bei Änderungen synchron halten.
 if [[ ! -f docker-compose.yml ]]; then
     echo "Erzeuge docker-compose.yml ..."
     cat > docker-compose.yml <<'COMPOSE_EOF'
@@ -33,7 +33,7 @@ if [[ ! -f docker-compose.yml ]]; then
 # (App kommt als fertiges Image von Docker Hub; Entwickler bauen mit:
 #  docker build -t mtprause/summarizer:latest .)
 #
-# Zugriff von unterwegs laeuft ueber den Telegram-Bot (Long-Polling, kein Tunnel noetig).
+# Zugriff von unterwegs läuft über den Telegram-Bot (Long-Polling, kein Tunnel nötig).
 
 services:
   postgres:
@@ -93,7 +93,7 @@ services:
     volumes:
       - ollama:/root/.ollama
 
-  # One-Shot: laedt Chat- und Embedding-Modell automatisch beim ersten Start
+  # One-Shot: lädt Chat- und Embedding-Modell automatisch beim ersten Start
   ollama-init:
     profiles: ["local-llm"]
     image: ollama/ollama:latest
@@ -115,7 +115,7 @@ services:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: summarizer-whisper
     ports:
-      # Nur localhost — fuer Entwicklung ausserhalb des Containers (mvn spring-boot:run)
+      # Nur localhost — für Entwicklung ausserhalb des Containers (mvn spring-boot:run)
       - "127.0.0.1:${WHISPER_PORT:-9000}:9000"
     environment:
       ASR_MODEL: ${WHISPER_MODEL:-small}
@@ -135,15 +135,12 @@ fi
 
 # --- 2. Konfiguration abfragen ---
 if [[ ! -f .env ]]; then
-    read -rp "Sprache deiner Inhalte? [1] Deutsch/gemischt (Standard) [2] Englisch: " lang
+    read -rp "Sprache deiner Inhalte? [1] Deutsch (Standard) [2] Englisch: " lang
     if [[ "${lang:-1}" == "2" ]]; then EMBED_MODEL=nomic-embed-text; EMBED_DIM=768
     else EMBED_MODEL=bge-m3; EMBED_DIM=1024; fi
 
     read -rp "Lokales LLM (Ollama im Container) verwenden? [J/n]: " locallm
     USE_LOCAL_LLM=$([[ "${locallm:-j}" == "n" ]] && echo no || echo yes)
-
-    read -rp "Audio-Transkription installieren (Whisper, ca. 2 GB)? [J/n]: " audio
-    USE_WHISPER=$([[ "${audio:-j}" == "n" ]] && echo no || echo yes)
 
     if [[ "$(uname)" == "Darwin" ]]; then
         RAM_GB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
@@ -151,9 +148,9 @@ if [[ ! -f .env ]]; then
         RAM_GB=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
     fi
     if (( RAM_GB >= 16 )); then CHAT_MODEL=qwen3.5:9b; else CHAT_MODEL=qwen3.5:4b; fi
-    echo "RAM: ${RAM_GB} GB -> Chat-Modell: ${CHAT_MODEL} (aenderbar im Studio unter 'KI-Modelle')"
+    echo "RAM: ${RAM_GB} GB -> Chat-Modell: ${CHAT_MODEL} (änderbar im Studio unter 'KI-Modelle')"
 
-    # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer aenderbar
+    # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer änderbar
     ADMIN_PW=""
 
     # Freien App-Port finden (Standard 8181)
@@ -175,7 +172,7 @@ CHAT_MODEL=${CHAT_MODEL}
 EMBEDDING_MODEL=${EMBED_MODEL}
 EMBEDDING_DIM=${EMBED_DIM}
 APP_PORT=${APP_PORT}
-$([[ "$USE_WHISPER" == "yes" ]] && echo "WHISPER_MODEL=small")
+WHISPER_MODEL=small
 EOF
     echo ".env geschrieben."
 else
@@ -188,7 +185,7 @@ grep -q "OLLAMA_BASE_URL=http://ollama" .env && PROFILES+=(--profile local-llm)
 grep -q "^WHISPER_MODEL=" .env && PROFILES+=(--profile whisper)
 echo "Lade Images von Docker Hub ..."
 if ! docker compose "${PROFILES[@]}" pull; then
-    echo "FEHLER: Images konnten nicht geladen werden - Internetverbindung pruefen." >&2
+    echo "FEHLER: Images konnten nicht geladen werden - Internetverbindung prüfen." >&2
     exit 1
 fi
 docker compose "${PROFILES[@]}" up -d
@@ -198,7 +195,7 @@ if [[ ! -f summarizer-start.sh ]]; then
     cat > summarizer-start.sh <<'START_EOF'
 #!/usr/bin/env bash
 # =====================================================================
-#  Summarizer starten — startet Container und oeffnet den Browser
+#  Summarizer starten — startet Container und öffnet den Browser
 # =====================================================================
 cd "$(dirname "$0")"
 
@@ -211,7 +208,7 @@ open_browser() {
     elif command -v open >/dev/null; then open "$URL"; fi
 }
 
-# Laeuft es schon?
+# Läuft es schon?
 if curl -sf -o /dev/null "${URL}/login"; then open_browser; exit 0; fi
 
 if ! docker info >/dev/null 2>&1; then
@@ -228,7 +225,7 @@ docker compose "${PROFILES[@]}" up -d >/dev/null
 
 for i in $(seq 1 90); do
     if curl -sf -o /dev/null "${URL}/login"; then
-        echo "Bereit — oeffne ${URL}"
+        echo "Bereit — öffne ${URL}"
         open_browser
         exit 0
     fi
@@ -242,10 +239,10 @@ START_EOF
     echo "Start-Skript erzeugt: ./summarizer-start.sh"
 fi
 
-# --- 4. Auf App warten, dann Browser oeffnen ---
+# --- 4. Auf App warten, dann Browser öffnen ---
 PORT=$(grep -E "^APP_PORT=" .env | cut -d= -f2)
 PORT=${PORT:-8181}
-echo "Warte auf die App (Modelle laedt der ollama-init-Container im Hintergrund) ..."
+echo "Warte auf die App (Modelle lädt der ollama-init-Container im Hintergrund) ..."
 READY=no
 for i in $(seq 1 60); do
     if curl -sf -o /dev/null "http://localhost:${PORT}/login"; then READY=yes; break; fi
@@ -255,11 +252,11 @@ done
 echo ""
 echo "=== Fertig! ==="
 echo "Studio:       http://localhost:${PORT}"
-echo "Login:        standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
-echo "Admin-Login:  admin / admin (Passwort im Studio unter Benutzer aendern)"
+echo "Login:        standardmäßig AUS (aktivierbar: Studio -> System -> Zugriff)"
+echo "Admin-Login:  admin / admin (Passwort im Studio unter Benutzer ändern)"
 if [[ "$READY" == "yes" ]]; then
     if command -v xdg-open >/dev/null; then xdg-open "http://localhost:${PORT}" >/dev/null 2>&1 &
     elif command -v open >/dev/null; then open "http://localhost:${PORT}"; fi
 else
-    echo "App braucht noch einen Moment - Seite gleich manuell oeffnen."
+    echo "App braucht noch einen Moment - Seite gleich manuell öffnen."
 fi

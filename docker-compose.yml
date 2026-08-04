@@ -7,7 +7,7 @@
 # (App kommt als fertiges Image von Docker Hub; Entwickler bauen mit:
 #  docker build -t mtprause/summarizer:latest .)
 #
-# Zugriff von unterwegs laeuft ueber den Telegram-Bot (Long-Polling, kein Tunnel noetig).
+# Zugriff von unterwegs läuft über den Telegram-Bot (Long-Polling, kein Tunnel nötig).
 
 services:
   postgres:
@@ -67,7 +67,7 @@ services:
     volumes:
       - ollama:/root/.ollama
 
-  # One-Shot: laedt Chat- und Embedding-Modell automatisch beim ersten Start
+  # One-Shot: lädt Chat- und Embedding-Modell automatisch beim ersten Start
   ollama-init:
     profiles: ["local-llm"]
     image: ollama/ollama:latest
@@ -89,7 +89,7 @@ services:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: summarizer-whisper
     ports:
-      # Nur localhost — fuer Entwicklung ausserhalb des Containers (mvn spring-boot:run)
+      # Nur localhost — für Entwicklung ausserhalb des Containers (mvn spring-boot:run)
       - "127.0.0.1:${WHISPER_PORT:-9000}:9000"
     environment:
       ASR_MODEL: ${WHISPER_MODEL:-small}

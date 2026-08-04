@@ -1,6 +1,6 @@
 ﻿# =====================================================================
 #  Summarizer — grafischer Installations-Assistent (Windows)
-#  Eigenstaendig: erzeugt docker-compose.yml, .env und Start-Skripte selbst.
+#  Eigenständig: erzeugt docker-compose.yml, .env und Start-Skripte selbst.
 #  Als EXE gebaut mit ps2exe (siehe README, Abschnitt Entwicklung).
 # =====================================================================
 Add-Type -AssemblyName System.Windows.Forms
@@ -43,7 +43,7 @@ $title.Size = New-Object System.Drawing.Size(400, 28)
 $header.Controls.Add($title)
 
 $subtitle = New-Object System.Windows.Forms.Label
-$subtitle.Text = "Dein privates Wissensarchiv — laeuft komplett lokal"
+$subtitle.Text = "Dein privates Wissensarchiv — läuft komplett lokal"
 $subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $subtitle.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 255)
 $subtitle.Location = New-Object System.Drawing.Point(64, 42)
@@ -67,7 +67,7 @@ $langBox = New-Object System.Windows.Forms.ComboBox
 $langBox.Location = New-Object System.Drawing.Point(28, 118)
 $langBox.Size = New-Object System.Drawing.Size(250, 26)
 $langBox.DropDownStyle = "DropDownList"
-[void]$langBox.Items.AddRange(@("Deutsch / gemischt", "Englisch"))
+[void]$langBox.Items.AddRange(@("Deutsch", "Englisch"))
 $langBox.SelectedIndex = 0
 $form.Controls.Add($langBox)
 
@@ -80,8 +80,8 @@ $llmBox.DropDownStyle = "DropDownList"
 $llmBox.SelectedIndex = 0
 $form.Controls.Add($llmBox)
 
-# Admin-Zugang fest: admin/admin - Passwort im Studio unter Benutzer aenderbar
-New-Label "Port der Weboberflaeche" 28 158 250 $true | Out-Null
+# Admin-Zugang fest: admin/admin - Passwort im Studio unter Benutzer änderbar
+New-Label "Port der Weboberfläche" 28 158 250 $true | Out-Null
 $portBox = New-Object System.Windows.Forms.NumericUpDown
 $portBox.Location = New-Object System.Drawing.Point(28, 180)
 $portBox.Size = New-Object System.Drawing.Size(120, 26)
@@ -103,16 +103,12 @@ $browseButton.Size = New-Object System.Drawing.Size(40, 27)
 $form.Controls.Add($browseButton)
 $browseButton.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = "Installationsordner waehlen"
+    $dlg.Description = "Installationsordner wählen"
     if ($dlg.ShowDialog() -eq "OK") { $dirBox.Text = $dlg.SelectedPath }
 })
 
-$audioBox = New-Object System.Windows.Forms.CheckBox
-$audioBox.Text = "Audio-Transkription mitinstallieren (Whisper, ca. 2 GB)"
-$audioBox.Location = New-Object System.Drawing.Point(28, 216)
-$audioBox.Size = New-Object System.Drawing.Size(420, 24)
-$audioBox.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
-$form.Controls.Add($audioBox)
+# Audio-Transkription (Whisper) ist immer dabei - keine Abfrage
+$audioInfo = New-Label "Audio-Transkription (Whisper) wird mitinstalliert" 28 216 420 $false
 
 # ---------------- Fortschritt ----------------
 $statusLabel = New-Label "Bereit zur Installation." 28 254 540 | Out-Null
@@ -146,7 +142,7 @@ $installButton.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Dra
 $form.Controls.Add($installButton)
 
 $openButton = New-Object System.Windows.Forms.Button
-$openButton.Text = "Studio oeffnen"
+$openButton.Text = "Studio öffnen"
 $openButton.Location = New-Object System.Drawing.Point(286, 470)
 $openButton.Size = New-Object System.Drawing.Size(142, 36)
 $openButton.FlatStyle = "Flat"
@@ -182,7 +178,7 @@ $installButton.Add_Click({
         Set-Location $installDir
         Write-Log "Installationsordner: $installDir"
 
-        # 0b. docker-compose.yml + Start-Skripte ablegen (eigenstaendige Installation)
+        # 0b. docker-compose.yml + Start-Skripte ablegen (eigenständige Installation)
         if (-not (Test-Path "docker-compose.yml")) {
             @'
 # Profile:
@@ -194,7 +190,7 @@ $installButton.Add_Click({
 # (App kommt als fertiges Image von Docker Hub; Entwickler bauen mit:
 #  docker build -t mtprause/summarizer:latest .)
 #
-# Zugriff von unterwegs laeuft ueber den Telegram-Bot (Long-Polling, kein Tunnel noetig).
+# Zugriff von unterwegs läuft über den Telegram-Bot (Long-Polling, kein Tunnel nötig).
 
 services:
   postgres:
@@ -254,7 +250,7 @@ services:
     volumes:
       - ollama:/root/.ollama
 
-  # One-Shot: laedt Chat- und Embedding-Modell automatisch beim ersten Start
+  # One-Shot: lädt Chat- und Embedding-Modell automatisch beim ersten Start
   ollama-init:
     profiles: ["local-llm"]
     image: ollama/ollama:latest
@@ -276,7 +272,7 @@ services:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: summarizer-whisper
     ports:
-      # Nur localhost — fuer Entwicklung ausserhalb des Containers (mvn spring-boot:run)
+      # Nur localhost — für Entwicklung ausserhalb des Containers (mvn spring-boot:run)
       - "127.0.0.1:${WHISPER_PORT:-9000}:9000"
     environment:
       ASR_MODEL: ${WHISPER_MODEL:-small}
@@ -298,7 +294,7 @@ volumes:
             @'
 # =====================================================================
 #  Summarizer starten — Doppelklick-Skript
-#  Startet Docker (falls noetig), die Container und oeffnet den Browser.
+#  Startet Docker (falls nötig), die Container und öffnet den Browser.
 # =====================================================================
 $ErrorActionPreference = "SilentlyContinue"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -315,13 +311,13 @@ function Get-EnvValue($key, $fallback) {
 $port = Get-EnvValue "APP_PORT" "8181"
 $url = "http://localhost:$port"
 
-# Laeuft es schon? Dann direkt oeffnen.
+# Läuft es schon? Dann direkt öffnen.
 try {
     $r = Invoke-WebRequest "$url/login" -TimeoutSec 2 -UseBasicParsing
     if ($r.StatusCode -eq 200) { Start-Process $url; exit 0 }
 } catch { }
 
-# Tray-Hinweis waehrend des Starts
+# Tray-Hinweis während des Starts
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = [System.Drawing.SystemIcons]::Information
 $notify.Visible = $true
@@ -345,12 +341,12 @@ if ((Get-Content ".env" -Raw) -match "WHISPER_MODEL=") { $profiles += @("--profi
 
 docker compose @profiles up -d *>$null
 
-# Auf die App warten, dann Browser oeffnen
+# Auf die App warten, dann Browser öffnen
 for ($i = 0; $i -lt 90; $i++) {
     try {
         $r = Invoke-WebRequest "$url/login" -TimeoutSec 2 -UseBasicParsing
         if ($r.StatusCode -eq 200) {
-            $notify.ShowBalloonTip(3000, "Summarizer", "Bereit — Browser wird geoeffnet.", "Info")
+            $notify.ShowBalloonTip(3000, "Summarizer", "Bereit — Browser wird geöffnet.", "Info")
             Start-Process $url
             Start-Sleep -Seconds 3
             $notify.Dispose()
@@ -361,7 +357,7 @@ for ($i = 0; $i -lt 90; $i++) {
 }
 
 [System.Windows.Forms.MessageBox]::Show(
-    "Summarizer antwortet nicht.`n`nLogs pruefen:  docker logs summarizer-app",
+    "Summarizer antwortet nicht.`n`nLogs prüfen:  docker logs summarizer-app",
     "Summarizer", "OK", "Warning") | Out-Null
 $notify.Dispose()
 '@ | Out-File -Encoding utf8 "Summarizer-Start.ps1"
@@ -369,13 +365,13 @@ $notify.Dispose()
         if (-not (Test-Path "Summarizer-Start.bat")) {
             @'
 @echo off
-REM Summarizer starten (Doppelklick) — startet Container und oeffnet den Browser
+REM Summarizer starten (Doppelklick) — startet Container und öffnet den Browser
 cd /d "%~dp0"
 start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0Summarizer-Start.ps1"
 '@ | Out-File -Encoding ascii "Summarizer-Start.bat"
         }
         # 0. WSL 2 (Docker Desktop braucht es als Backend)
-        Set-Status "Pruefe WSL 2 ..." 3
+        Set-Status "Prüfe WSL 2 ..." 3
         $wslOk = $false
         try {
             wsl.exe --status *>$null
@@ -390,23 +386,23 @@ start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File
                 throw "WSL-Installation abgebrochen. Manuell: PowerShell als Administrator -> 'wsl --install --no-distribution'"
             }
             [System.Windows.Forms.MessageBox]::Show(
-                "WSL 2 wurde installiert. Bitte Windows neu starten und diesen Assistenten erneut ausfuehren.",
-                "Neustart noetig", "OK", "Information") | Out-Null
+                "WSL 2 wurde installiert. Bitte Windows neu starten und diesen Assistenten erneut ausführen.",
+                "Neustart nötig", "OK", "Information") | Out-Null
             $installButton.Enabled = $true
             return
         }
         Write-Log "WSL 2 bereit."
 
         # 1. Docker
-        Set-Status "Pruefe Docker ..." 5
+        Set-Status "Prüfe Docker ..." 5
         if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
             Write-Log "Docker nicht gefunden — starte Installation via winget ..."
             Set-Status "Installiere Docker Desktop (dauert einige Minuten) ..." 10
             winget install -e --id Docker.DockerDesktop --accept-source-agreements --accept-package-agreements 2>&1 |
                 ForEach-Object { Write-Log $_ }
             [System.Windows.Forms.MessageBox]::Show(
-                "Docker Desktop wurde installiert. Bitte Windows neu starten, Docker einmal oeffnen und diesen Assistenten erneut ausfuehren.",
-                "Neustart noetig", "OK", "Information") | Out-Null
+                "Docker Desktop wurde installiert. Bitte Windows neu starten, Docker einmal öffnen und diesen Assistenten erneut ausführen.",
+                "Neustart nötig", "OK", "Information") | Out-Null
             $installButton.Enabled = $true
             return
         }
@@ -421,12 +417,12 @@ start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File
                 Start-Sleep -Seconds 3
                 [System.Windows.Forms.Application]::DoEvents()
             }
-            if ($LASTEXITCODE -ne 0) { throw "Docker-Engine laeuft nicht." }
+            if ($LASTEXITCODE -ne 0) { throw "Docker-Engine läuft nicht." }
         }
         Write-Log "Docker bereit."
 
-        # 2. Port pruefen
-        Set-Status "Pruefe Port ..." 18
+        # 2. Port prüfen
+        Set-Status "Prüfe Port ..." 18
         $port = [int]$portBox.Value
         while (-not (Test-PortFree $port)) {
             Write-Log "Port $port belegt — probiere $($port + 1)"
@@ -456,28 +452,28 @@ CHAT_MODEL=$chat
 EMBEDDING_MODEL=$embed
 EMBEDDING_DIM=$dim
 APP_PORT=$port
-$(if ($audioBox.Checked) { "WHISPER_MODEL=small" })
+WHISPER_MODEL=small
 "@ | ForEach-Object { if (-not $envExists) { $_ | Out-File -Encoding utf8 ".env" } }
-        if ($envExists) { Write-Log ".env existiert bereits - Konfiguration unveraendert." }
+        if ($envExists) { Write-Log ".env existiert bereits - Konfiguration unverändert." }
 
         # 4. Images laden
         $profiles = @("--profile", "app")
         if ($llmBox.SelectedIndex -eq 0) { $profiles += @("--profile", "local-llm") }
-        if ($audioBox.Checked) { $profiles += @("--profile", "whisper") }
+        $profiles += @("--profile", "whisper")
 
         Set-Status "Lade Programm-Images herunter ..." 35
         Write-Log "Ziehe fertige Images von Docker Hub (kein lokaler Build) ..."
         docker compose @profiles pull 2>&1 | ForEach-Object { Write-Log $_ }
         if ($LASTEXITCODE -ne 0) {
-            throw "Images konnten nicht geladen werden - Internetverbindung pruefen."
+            throw "Images konnten nicht geladen werden - Internetverbindung prüfen."
         }
 
         Set-Status "Starte Container ..." 55
         docker compose @profiles up -d 2>&1 | ForEach-Object { Write-Log $_ }
         if ($LASTEXITCODE -ne 0) { throw "Container-Start fehlgeschlagen." }
 
-        # 4b. Start-Verknuepfungen anlegen
-        Set-Status "Erstelle Verknuepfungen ..." 65
+        # 4b. Start-Verknüpfungen anlegen
+        Set-Status "Erstelle Verknüpfungen ..." 65
         try {
             $shell = New-Object -ComObject WScript.Shell
             foreach ($dir in @([Environment]::GetFolderPath("Desktop"),
@@ -489,8 +485,8 @@ $(if ($audioBox.Checked) { "WHISPER_MODEL=small" })
                 $lnk.Description = "Summarizer Studio starten"
                 $lnk.Save()
             }
-            Write-Log "Verknuepfungen auf Desktop und im Startmenue angelegt."
-        } catch { Write-Log "Verknuepfung konnte nicht angelegt werden: $_" }
+            Write-Log "Verknüpfungen auf Desktop und im Startmenü angelegt."
+        } catch { Write-Log "Verknüpfung konnte nicht angelegt werden: $_" }
 
         # 5. Warten
         Set-Status "Warte auf die Anwendung ..." 70
@@ -503,16 +499,16 @@ $(if ($audioBox.Checked) { "WHISPER_MODEL=small" })
             Start-Sleep -Seconds 3
             Set-Status "Warte auf die Anwendung ... ($($i * 3)s)" ([Math]::Min(95, 70 + $i / 3))
         }
-        if (-not $ready) { throw "Anwendung antwortet nicht — Logs pruefen: docker logs summarizer-app" }
+        if (-not $ready) { throw "Anwendung antwortet nicht — Logs prüfen: docker logs summarizer-app" }
 
-        Set-Status "Fertig — Summarizer laeuft auf Port $port." 100
+        Set-Status "Fertig — Summarizer läuft auf Port $port." 100
         Write-Log ""
         Write-Log "=== Installation abgeschlossen ==="
         Write-Log "Studio:      http://localhost:$port"
-        Write-Log "Starten:     Desktop-Verknuepfung 'Summarizer' (startet Docker + Browser)"
+        Write-Log "Starten:     Desktop-Verknüpfung 'Summarizer' (startet Docker + Browser)"
         Write-Log "Benutzer:    admin"
-        Write-Log "Passwort:    admin (Standard - bitte im Studio unter Benutzer aendern)"
-        Write-Log "Login:       standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
+        Write-Log "Passwort:    admin (Standard - bitte im Studio unter Benutzer ändern)"
+        Write-Log "Login:       standardmäßig AUS (aktivierbar: Studio -> System -> Zugriff)"
         $openButton.Enabled = $true
         Start-Process "http://localhost:$port"
     } catch {

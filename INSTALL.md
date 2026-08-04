@@ -14,7 +14,8 @@ or the source code.
 ## Windows
 
 Easiest: double-click **`Summarizer-Setup.exe`** - graphical wizard
-(folder picker, language, LLM, Whisper option, progress) incl. desktop shortcut.
+(folder picker, language, LLM, progress) incl. desktop shortcut.
+Audio transcription (Whisper) is always installed.
 
 Alternatively via script:
 

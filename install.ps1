@@ -1,42 +1,42 @@
 ﻿# Summarizer Installer (Windows)
-# Prueft/installiert Docker Desktop, fragt Konfiguration ab, startet den Stack.
+# Prüft/installiert Docker Desktop, fragt Konfiguration ab, startet den Stack.
 $ErrorActionPreference = "Stop"
 Write-Host "=== Summarizer Installation ===" -ForegroundColor Cyan
 
-# --- 0. WSL 2 pruefen / installieren (Docker Desktop braucht es als Backend) ---
+# --- 0. WSL 2 prüfen / installieren (Docker Desktop braucht es als Backend) ---
 $wslOk = $false
 try {
     wsl.exe --status *>$null
     if ($LASTEXITCODE -eq 0) { $wslOk = $true }
 } catch {}
 if (-not $wslOk) {
-    Write-Host "WSL 2 fehlt - installiere Windows-Subsystem fuer Linux (braucht Adminrechte)..."
+    Write-Host "WSL 2 fehlt - installiere Windows-Subsystem für Linux (braucht Adminrechte)..."
     try {
         Start-Process wsl.exe -ArgumentList "--install --no-distribution" -Verb RunAs -Wait
     } catch {
         Write-Host "WSL-Installation abgebrochen oder fehlgeschlagen." -ForegroundColor Red
-        Write-Host "Manuell: PowerShell als Administrator oeffnen -> 'wsl --install --no-distribution'" -ForegroundColor Yellow
+        Write-Host "Manuell: PowerShell als Administrator öffnen -> 'wsl --install --no-distribution'" -ForegroundColor Yellow
         exit 1
     }
     Write-Host ""
     Write-Host "WSL wurde installiert. Bitte den Rechner NEU STARTEN" -ForegroundColor Yellow
-    Write-Host "und dieses Skript danach erneut ausfuehren." -ForegroundColor Yellow
+    Write-Host "und dieses Skript danach erneut ausführen." -ForegroundColor Yellow
     exit 0
 }
 Write-Host "WSL 2 OK."
 
-# --- 1. Docker pruefen / installieren ---
+# --- 1. Docker prüfen / installieren ---
 $docker = Get-Command docker -ErrorAction SilentlyContinue
 if (-not $docker) {
     Write-Host "Docker nicht gefunden - installiere Docker Desktop via winget..."
     winget install -e --id Docker.DockerDesktop --accept-source-agreements --accept-package-agreements
     Write-Host "Docker Desktop installiert. Bitte einmal starten (und ggf. Rechner neu starten)," -ForegroundColor Yellow
-    Write-Host "dann dieses Skript erneut ausfuehren." -ForegroundColor Yellow
+    Write-Host "dann dieses Skript erneut ausführen." -ForegroundColor Yellow
     exit 0
 }
 try { docker info *>$null } catch {}
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Docker-Engine laeuft nicht - starte Docker Desktop..."
+    Write-Host "Docker-Engine läuft nicht - starte Docker Desktop..."
     Start-Process "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
     $tries = 0
     while ($tries -lt 60) {
@@ -44,12 +44,12 @@ if ($LASTEXITCODE -ne 0) {
         if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 3; $tries++
     }
-    if ($LASTEXITCODE -ne 0) { Write-Host "Docker startet nicht - bitte manuell pruefen." -ForegroundColor Red; exit 1 }
+    if ($LASTEXITCODE -ne 0) { Write-Host "Docker startet nicht - bitte manuell prüfen." -ForegroundColor Red; exit 1 }
 }
 Write-Host "Docker OK." -ForegroundColor Green
 
 # --- 1b. docker-compose.yml erzeugen, falls nicht vorhanden (Ein-Datei-Installation) ---
-# Inhalt gespiegelt aus docker-compose.yml im Repo - bei Aenderungen synchron halten.
+# Inhalt gespiegelt aus docker-compose.yml im Repo - bei Änderungen synchron halten.
 if (-not (Test-Path "docker-compose.yml")) {
     Write-Host "Erzeuge docker-compose.yml ..."
     @'
@@ -62,7 +62,7 @@ if (-not (Test-Path "docker-compose.yml")) {
 # (App kommt als fertiges Image von Docker Hub; Entwickler bauen mit:
 #  docker build -t mtprause/summarizer:latest .)
 #
-# Zugriff von unterwegs laeuft ueber den Telegram-Bot (Long-Polling, kein Tunnel noetig).
+# Zugriff von unterwegs läuft über den Telegram-Bot (Long-Polling, kein Tunnel nötig).
 
 services:
   postgres:
@@ -122,7 +122,7 @@ services:
     volumes:
       - ollama:/root/.ollama
 
-  # One-Shot: laedt Chat- und Embedding-Modell automatisch beim ersten Start
+  # One-Shot: lädt Chat- und Embedding-Modell automatisch beim ersten Start
   ollama-init:
     profiles: ["local-llm"]
     image: ollama/ollama:latest
@@ -144,7 +144,7 @@ services:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: summarizer-whisper
     ports:
-      # Nur localhost — fuer Entwicklung ausserhalb des Containers (mvn spring-boot:run)
+      # Nur localhost — für Entwicklung ausserhalb des Containers (mvn spring-boot:run)
       - "127.0.0.1:${WHISPER_PORT:-9000}:9000"
     environment:
       ASR_MODEL: ${WHISPER_MODEL:-small}
@@ -165,24 +165,21 @@ volumes:
 # --- 2. Konfiguration abfragen ---
 if (-not (Test-Path ".env")) {
     Write-Host ""
-    $lang = Read-Host "Sprache deiner Inhalte? [1] Deutsch/gemischt (Standard)  [2] Englisch"
+    $lang = Read-Host "Sprache deiner Inhalte? [1] Deutsch (Standard)  [2] Englisch"
     if ($lang -eq "2") { $embedModel = "nomic-embed-text"; $embedDim = 768 }
     else { $embedModel = "bge-m3"; $embedDim = 1024 }
 
     $localLlm = Read-Host "Lokales LLM (Ollama im Container) verwenden? [J/n]"
     $useLocalLlm = $localLlm -ne "n"
 
-    $audio = Read-Host "Audio-Transkription installieren (Whisper, ca. 2 GB)? [J/n]"
-    $useWhisper = $audio -ne "n"
-
     $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
     if ($ram -ge 16) { $chatModel = "qwen3.5:9b" } else { $chatModel = "qwen3.5:4b" }
-    Write-Host "RAM: $ram GB -> Chat-Modell: $chatModel (aenderbar im Studio unter 'KI-Modelle')"
+    Write-Host "RAM: $ram GB -> Chat-Modell: $chatModel (änderbar im Studio unter 'KI-Modelle')"
 
-    # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer aenderbar
+    # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer änderbar
     $adminPw = ""
 
-    # Freien App-Port finden (Standard 8181, bei Belegung hochzaehlen)
+    # Freien App-Port finden (Standard 8181, bei Belegung hochzählen)
     $appPort = 8181
     while (Get-NetTCPConnection -LocalPort $appPort -State Listen -ErrorAction SilentlyContinue) {
         $appPort++
@@ -200,7 +197,7 @@ CHAT_MODEL=$chatModel
 EMBEDDING_MODEL=$embedModel
 EMBEDDING_DIM=$embedDim
 APP_PORT=$appPort
-$(if ($useWhisper) { "WHISPER_MODEL=small" })
+WHISPER_MODEL=small
 "@ | Out-File -Encoding utf8 ".env"
     Write-Host ".env geschrieben." -ForegroundColor Green
 } else {
@@ -215,18 +212,18 @@ if ($envContent -match "WHISPER_MODEL=") { $profiles += @("--profile", "whisper"
 Write-Host "Lade Images von Docker Hub ..."
 docker compose @profiles pull
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "FEHLER: Images konnten nicht geladen werden - Internetverbindung pruefen." -ForegroundColor Red
+    Write-Host "FEHLER: Images konnten nicht geladen werden - Internetverbindung prüfen." -ForegroundColor Red
     exit 1
 }
 docker compose @profiles up -d
 if ($LASTEXITCODE -ne 0) { Write-Host "docker compose fehlgeschlagen." -ForegroundColor Red; exit 1 }
 
-# --- 3b. Start-Skripte ablegen + Desktop-Verknuepfung "Summarizer" ---
+# --- 3b. Start-Skripte ablegen + Desktop-Verknüpfung "Summarizer" ---
 if (-not (Test-Path "Summarizer-Start.ps1")) {
     @'
 # =====================================================================
 #  Summarizer starten — Doppelklick-Skript
-#  Startet Docker (falls noetig), die Container und oeffnet den Browser.
+#  Startet Docker (falls nötig), die Container und öffnet den Browser.
 # =====================================================================
 $ErrorActionPreference = "SilentlyContinue"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -243,13 +240,13 @@ function Get-EnvValue($key, $fallback) {
 $port = Get-EnvValue "APP_PORT" "8181"
 $url = "http://localhost:$port"
 
-# Laeuft es schon? Dann direkt oeffnen.
+# Läuft es schon? Dann direkt öffnen.
 try {
     $r = Invoke-WebRequest "$url/login" -TimeoutSec 2 -UseBasicParsing
     if ($r.StatusCode -eq 200) { Start-Process $url; exit 0 }
 } catch { }
 
-# Tray-Hinweis waehrend des Starts
+# Tray-Hinweis während des Starts
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = [System.Drawing.SystemIcons]::Information
 $notify.Visible = $true
@@ -273,12 +270,12 @@ if ((Get-Content ".env" -Raw) -match "WHISPER_MODEL=") { $profiles += @("--profi
 
 docker compose @profiles up -d *>$null
 
-# Auf die App warten, dann Browser oeffnen
+# Auf die App warten, dann Browser öffnen
 for ($i = 0; $i -lt 90; $i++) {
     try {
         $r = Invoke-WebRequest "$url/login" -TimeoutSec 2 -UseBasicParsing
         if ($r.StatusCode -eq 200) {
-            $notify.ShowBalloonTip(3000, "Summarizer", "Bereit — Browser wird geoeffnet.", "Info")
+            $notify.ShowBalloonTip(3000, "Summarizer", "Bereit — Browser wird geöffnet.", "Info")
             Start-Process $url
             Start-Sleep -Seconds 3
             $notify.Dispose()
@@ -289,7 +286,7 @@ for ($i = 0; $i -lt 90; $i++) {
 }
 
 [System.Windows.Forms.MessageBox]::Show(
-    "Summarizer antwortet nicht.`n`nLogs pruefen:  docker logs summarizer-app",
+    "Summarizer antwortet nicht.`n`nLogs prüfen:  docker logs summarizer-app",
     "Summarizer", "OK", "Warning") | Out-Null
 $notify.Dispose()
 '@ | Out-File -Encoding utf8 "Summarizer-Start.ps1"
@@ -297,7 +294,7 @@ $notify.Dispose()
 if (-not (Test-Path "Summarizer-Start.bat")) {
     @'
 @echo off
-REM Summarizer starten (Doppelklick) — startet Container und oeffnet den Browser
+REM Summarizer starten (Doppelklick) — startet Container und öffnet den Browser
 cd /d "%~dp0"
 start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0Summarizer-Start.ps1"
 '@ | Out-File -Encoding ascii "Summarizer-Start.bat"
@@ -310,13 +307,13 @@ try {
     $lnk.WorkingDirectory = (Get-Location).Path
     $lnk.Description = "Summarizer Studio starten"
     $lnk.Save()
-    Write-Host "Desktop-Verknuepfung 'Summarizer' angelegt." -ForegroundColor Green
-} catch { Write-Host "Desktop-Verknuepfung konnte nicht angelegt werden." }
+    Write-Host "Desktop-Verknüpfung 'Summarizer' angelegt." -ForegroundColor Green
+} catch { Write-Host "Desktop-Verknüpfung konnte nicht angelegt werden." }
 
-# --- 4. Auf App warten, dann Browser oeffnen ---
+# --- 4. Auf App warten, dann Browser öffnen ---
 $port = ([regex]::Match($envContent, "APP_PORT=(\d+)")).Groups[1].Value
 if (-not $port) { $port = 8181 }
-Write-Host "Warte auf die App (Modelle laedt der ollama-init-Container im Hintergrund) ..."
+Write-Host "Warte auf die App (Modelle lädt der ollama-init-Container im Hintergrund) ..."
 $ready = $false
 for ($i = 0; $i -lt 60; $i++) {
     try {
@@ -329,10 +326,10 @@ for ($i = 0; $i -lt 60; $i++) {
 Write-Host ""
 Write-Host "=== Fertig! ===" -ForegroundColor Cyan
 Write-Host "Studio:       http://localhost:$port"
-Write-Host "Login:        standardmaessig AUS (aktivierbar: Studio -> System -> Zugriff)"
-Write-Host "Admin-Login:  admin / admin (Passwort im Studio unter Benutzer aendern)"
+Write-Host "Login:        standardmäßig AUS (aktivierbar: Studio -> System -> Zugriff)"
+Write-Host "Admin-Login:  admin / admin (Passwort im Studio unter Benutzer ändern)"
 if ($ready) {
     Start-Process "http://localhost:$port"
 } else {
-    Write-Host "App braucht noch einen Moment - Seite gleich manuell oeffnen: http://localhost:$port" -ForegroundColor Yellow
+    Write-Host "App braucht noch einen Moment - Seite gleich manuell öffnen: http://localhost:$port" -ForegroundColor Yellow
 }
