@@ -71,6 +71,7 @@ public class SystemView extends VerticalLayout {
         addTelegramSection(telegram, qrCodes, currentUser, settings);
         addLanguageSection(settings);
         addImportSection(settings, currentUser);
+        addArchitectSection(settings, currentUser);
         addAccessSection(settings, currentUser, users, passwordEncoder);
     }
 
@@ -130,6 +131,57 @@ public class SystemView extends VerticalLayout {
                     getTranslation("system.import.saved"));
         });
         add(limit);
+    }
+
+    /** Automatik: Kategorie-Architekt an/aus + Konfidenz-Schwelle. */
+    private void addArchitectSection(com.summarizer.settings.AppSettingsService settings,
+                                     com.summarizer.base.CurrentUser currentUser) {
+        if (!"ADMIN".equals(currentUser.get().getRole())) {
+            return;
+        }
+        add(new com.vaadin.flow.component.html.H2(getTranslation("system.architect.title")));
+        com.vaadin.flow.component.html.Paragraph hint =
+                new com.vaadin.flow.component.html.Paragraph(getTranslation("system.architect.hint"));
+        hint.getStyle().set("color", "var(--lumo-secondary-text-color)").set("font-size", "0.9em");
+        add(hint);
+
+        com.vaadin.flow.component.checkbox.Checkbox enabled =
+                new com.vaadin.flow.component.checkbox.Checkbox(
+                        getTranslation("system.architect.enabled"));
+        enabled.setValue(!"false".equals(settings.get(
+                com.summarizer.category.CategoryArchitectService.ENABLED_KEY, "true")));
+        enabled.addValueChangeListener(e -> {
+            if (e.isFromClient()) {
+                settings.set(com.summarizer.category.CategoryArchitectService.ENABLED_KEY,
+                        Boolean.TRUE.equals(e.getValue()) ? "true" : "false");
+                com.vaadin.flow.component.notification.Notification.show(
+                        getTranslation("system.import.saved"));
+            }
+        });
+
+        com.vaadin.flow.component.textfield.IntegerField threshold =
+                new com.vaadin.flow.component.textfield.IntegerField(
+                        getTranslation("system.architect.threshold"));
+        threshold.setMin(10);
+        threshold.setMax(100);
+        threshold.setStepButtonsVisible(true);
+        threshold.setStep(5);
+        threshold.setWidth("220px");
+        try {
+            threshold.setValue(Math.round(Float.parseFloat(settings.get(
+                    com.summarizer.category.CategoryArchitectService.THRESHOLD_KEY, "0.70")) * 100));
+        } catch (NumberFormatException e) {
+            threshold.setValue(70);
+        }
+        threshold.addValueChangeListener(e -> {
+            if (e.isFromClient() && e.getValue() != null) {
+                settings.set(com.summarizer.category.CategoryArchitectService.THRESHOLD_KEY,
+                        String.valueOf(e.getValue() / 100.0f));
+                com.vaadin.flow.component.notification.Notification.show(
+                        getTranslation("system.import.saved"));
+            }
+        });
+        add(enabled, threshold);
     }
 
     /** Zugriff: Login an/aus — Standard ist ohne Login (rein lokaler Betrieb). */

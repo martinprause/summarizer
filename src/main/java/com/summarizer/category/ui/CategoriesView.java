@@ -348,10 +348,31 @@ public class CategoriesView extends VerticalLayout {
         dialog.setCancelable(true);
         dialog.setCancelText(getTranslation("categories.cancel"));
         dialog.setConfirmText(getTranslation("categories.reclassify.confirm"));
-        dialog.addConfirmListener(e -> {
-            pipeline.reclassifyAll(currentUser.id());
+        dialog.addConfirmListener(e -> openReclassifyOptions());
+        dialog.open();
+    }
+
+    /** Optionen für den Lauf: Manuelles schützen, neue Kategorien erlauben. */
+    private void openReclassifyOptions() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("categories.reclassify.options.title"));
+        com.vaadin.flow.component.checkbox.Checkbox keepManual =
+                new com.vaadin.flow.component.checkbox.Checkbox(
+                        getTranslation("categories.reclassify.keepManual"), true);
+        com.vaadin.flow.component.checkbox.Checkbox allowNew =
+                new com.vaadin.flow.component.checkbox.Checkbox(
+                        getTranslation("categories.reclassify.allowNew"), true);
+        Paragraph hint = new Paragraph(getTranslation("categories.reclassify.options.hint"));
+        hint.getStyle().set("font-size", "0.85em")
+                .set("color", "var(--lumo-secondary-text-color)");
+        Button start = new Button(getTranslation("categories.reclassify.start"), e -> {
+            pipeline.reclassifyAll(currentUser.id(), keepManual.getValue(), allowNew.getValue());
+            dialog.close();
             Notification.show(getTranslation("categories.reclassify.started"));
         });
+        start.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        dialog.add(new VerticalLayout(keepManual, allowNew, hint));
+        dialog.getFooter().add(start);
         dialog.open();
     }
 

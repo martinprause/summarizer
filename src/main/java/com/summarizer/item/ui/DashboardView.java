@@ -77,6 +77,7 @@ public class DashboardView extends HorizontalLayout {
     private final DatePicker fromDate = new DatePicker();
     private final DatePicker toDate = new DatePicker();
     private final Checkbox deadBox = new Checkbox();
+    private final Checkbox includeSubs = new Checkbox();
 
     private final VerticalLayout sidebar = new VerticalLayout();
     private final TreeGrid<Category> favTree = new TreeGrid<>();
@@ -341,6 +342,14 @@ public class DashboardView extends HorizontalLayout {
             }
         });
 
+        includeSubs.setLabel(getTranslation("dashboard.filter.includeSubs"));
+        includeSubs.setValue(true);
+        includeSubs.addValueChangeListener(e -> {
+            if (e.isFromClient()) {
+                reload();
+            }
+        });
+
         Button search = new Button(getTranslation("dashboard.filter.searchButton"), e -> reload());
         search.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         search.addClickShortcut(com.vaadin.flow.component.Key.ENTER);
@@ -356,8 +365,8 @@ public class DashboardView extends HorizontalLayout {
             reload();
         });
 
-        FlexLayout bar = new FlexLayout(searchField, semanticBox, categoryBox, typeBox,
-                tagBox, fromDate, toDate, deadBox, search, reset);
+        FlexLayout bar = new FlexLayout(searchField, semanticBox, categoryBox, includeSubs,
+                typeBox, tagBox, fromDate, toDate, deadBox, search, reset);
         bar.setFlexWrap(FlexLayout.FlexWrap.WRAP);
         bar.addClassName("s-toolbar");
         bar.getStyle().set("gap", "0.5em").set("align-items", "end").set("width", "100%");
@@ -694,11 +703,16 @@ public class DashboardView extends HorizontalLayout {
     // ---------- Daten laden ----------
 
     private ItemQueryService.Filter currentFilter() {
+        boolean withSubs = Boolean.TRUE.equals(includeSubs.getValue());
         List<Long> categoryIds = null;
         if (selectedTreeCategory != null) {
-            categoryIds = categoryTree.selfAndDescendantIds(user.getId(), selectedTreeCategory.getId());
+            categoryIds = withSubs
+                    ? categoryTree.selfAndDescendantIds(user.getId(), selectedTreeCategory.getId())
+                    : List.of(selectedTreeCategory.getId());
         } else if (categoryBox.getValue() != null) {
-            categoryIds = categoryTree.selfAndDescendantIds(user.getId(), categoryBox.getValue().getId());
+            categoryIds = withSubs
+                    ? categoryTree.selfAndDescendantIds(user.getId(), categoryBox.getValue().getId())
+                    : List.of(categoryBox.getValue().getId());
         }
         return new ItemQueryService.Filter(
                 searchField.getValue(),

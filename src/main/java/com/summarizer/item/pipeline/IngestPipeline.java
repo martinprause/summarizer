@@ -20,7 +20,9 @@ import org.springframework.stereotype.Component;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,6 +49,7 @@ public class IngestPipeline {
     private final com.summarizer.base.JobProgressService progress;
     private final Path filesDir;
     private final com.summarizer.item.extract.YouTubeTranscriptService youtube;
+    private final com.summarizer.category.CategoryArchitectService architect;
 
     public IngestPipeline(ItemRepository items, CategoryRepository categories,
                           FavoritesService favorites, WebPageExtractor extractor,
@@ -57,8 +60,10 @@ public class IngestPipeline {
                           com.summarizer.item.TagService tags,
                           com.summarizer.base.JobProgressService progress,
                           @Value("${summarizer.files.dir}") String filesDir,
-                          com.summarizer.item.extract.YouTubeTranscriptService youtube) {
+                          com.summarizer.item.extract.YouTubeTranscriptService youtube,
+                          com.summarizer.category.CategoryArchitectService architect) {
         this.youtube = youtube;
+        this.architect = architect;
         this.progress = progress;
         this.fileExtractor = fileExtractor;
         this.whisper = whisper;
@@ -360,6 +365,21 @@ public class IngestPipeline {
         if (tags.tagsForItem(item.getId()).isEmpty()) {
             autoTag(item);     // Fallback
         }
+
+        // Architekt: unter der Schwelle -> bestehende Ober-/Unterkategorie prüfen
+        // oder intelligent eine neue anlegen (Budget + Junk-Schutz im Service)
+        float threshold = architect.threshold();
+        boolean weak = item.getCategoryId() == null
+                || item.getCategoryConfidence() == null
+                || item.getCategoryConfidence() < threshold;
+        if (weak && architect.enabled() && !userCategories.isEmpty()) {
+            architect.place(item.getUserId(), item.getTitle(), item.getSummary(),
+                            item.getRawText(), userCategories)
+                    .ifPresent(category -> {
+                        item.setCategoryId(category.getId());
+                        item.setCategoryConfidence(threshold);
+                    });
+        }
     }
 
     /** Kommagetrennte Tag-Zeile filtern und setzen (gemeinsame Regeln mit autoTag). */
@@ -404,34 +424,111 @@ public class IngestPipeline {
     }
 
     /**
-     * Alle fertigen Items neu klassifizieren — z. B. nach Umbau der Kategorien.
-     * Items im Favoriten-Teilbaum bleiben unangetastet (nur manuell gepflegt).
+     * Alle fertigen Items neu klassifizieren — zweistufig:
+     * Pass 1 ordnet gegen den bestehenden Baum zu (Schwelle aus den Einstellungen),
+     * Pass 2 lässt den Architekten für die unsicheren Fälle Kategorien finden/anlegen.
+     * Favoriten-Teilbaum bleibt unangetastet; manuell Zugeordnete (Konfidenz 1.0)
+     * optional ebenfalls.
      */
     @Async
-    public void reclassifyAll(Long userId) {
+    public void reclassifyAll(Long userId, boolean keepManual, boolean allowNew) {
         List<Long> favoriteIds = favorites.subtreeIds(userId);
         List<Item> all = items.findByUserIdAndStatus(userId, Item.Status.DONE);
         String key = com.summarizer.base.JobProgressService.reclassifyKey(userId);
         progress.start(key, "Neu kategorisieren", all.size());
+        architect.resetBudget(userId);
+        snapshotCategories(userId);
+
+        float threshold = architect.threshold();
         int changed = 0;
+        int skippedManual = 0;
         int done = 0;
+        List<Item> waitlist = new ArrayList<>();
+
+        // Pass 1: normale Zuordnung gegen den aktuellen Baum
         for (Item item : all) {
-            if (item.getCategoryId() == null || !favoriteIds.contains(item.getCategoryId())) {
-                Long before = item.getCategoryId();
-                item.setCategoryId(null);
-                item.setCategoryConfidence(null);
-                classify(item);
-                items.save(item);
-                if (!java.util.Objects.equals(before, item.getCategoryId())) {
-                    changed++;
+            boolean isFavorite = item.getCategoryId() != null
+                    && favoriteIds.contains(item.getCategoryId());
+            boolean isManual = keepManual && item.getCategoryConfidence() != null
+                    && item.getCategoryConfidence() >= 0.999f;
+            if (isFavorite || isManual) {
+                if (isManual) {
+                    skippedManual++;
                 }
+                autoTag(item);
+                progress.update(key, ++done);
+                continue;
             }
-            autoTag(item);   // vergibt Tags nur, wo noch keine sind
+            Long before = item.getCategoryId();
+            item.setCategoryId(null);
+            item.setCategoryConfidence(null);
+            classify(item);
+            if (item.getCategoryId() == null
+                    || item.getCategoryConfidence() == null
+                    || item.getCategoryConfidence() < threshold) {
+                waitlist.add(item);   // Pass 2 entscheidet
+            }
+            items.save(item);
+            if (!java.util.Objects.equals(before, item.getCategoryId())) {
+                changed++;
+            }
+            autoTag(item);
             progress.update(key, ++done);
         }
-        progress.finish(key, changed + " von " + all.size() + " Items umsortiert");
-        log.info("Neu-Kategorisierung für User {}: {} Items geprüft, {} umsortiert",
-                userId, all.size(), changed);
+
+        // Pass 2: Architekt für die Warteliste — neue Kategorien stehen
+        // nachfolgenden Items sofort zur Verfügung
+        int architectPlaced = 0;
+        if (allowNew && architect.enabled() && !waitlist.isEmpty()) {
+            for (Item item : waitlist) {
+                List<Category> current = categories
+                        .findByUserIdOrderBySortOrderAscNameAsc(userId).stream()
+                        .filter(c -> !favoriteIds.contains(c.getId()))
+                        .toList();
+                var placed = architect.place(userId, item.getTitle(), item.getSummary(),
+                        item.getRawText(), current);
+                if (placed.isPresent()) {
+                    item.setCategoryId(placed.get().getId());
+                    item.setCategoryConfidence(threshold);
+                    items.save(item);
+                    architectPlaced++;
+                }
+            }
+        }
+
+        long unsorted = waitlist.size() - architectPlaced;
+        String result = changed + " umsortiert · " + architect.createdCount(userId)
+                + " neue Kategorien · " + unsorted + " in Unsortiert"
+                + (skippedManual > 0 ? " · " + skippedManual + " manuell unverändert" : "");
+        progress.finish(key, result);
+        com.summarizer.base.UiNotifier.broadcast("🗂 Neu kategorisiert: " + result);
+        log.info("Neu-Kategorisierung für User {}: {}", userId, result);
+    }
+
+    /** Kategorien-Schnappschuss vor dem Lauf — Rollback-Material im Datenverzeichnis. */
+    private void snapshotCategories(Long userId) {
+        try {
+            List<Category> all = categories.findByUserIdOrderBySortOrderAscNameAsc(userId);
+            var mapper = new tools.jackson.databind.ObjectMapper();
+            Path dir = filesDir.resolve("backups");
+            java.nio.file.Files.createDirectories(dir);
+            Path target = dir.resolve("categories-" + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".json");
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (Category c : all) {
+                Map<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("name", c.getName());
+                row.put("description", c.getDescription());
+                row.put("color", c.getColor());
+                row.put("parentId", c.getParentId());
+                row.put("id", c.getId());
+                rows.add(row);
+            }
+            java.nio.file.Files.writeString(target, mapper.writeValueAsString(rows));
+            log.info("Kategorien-Schnappschuss: {}", target);
+        } catch (Exception e) {
+            log.warn("Kategorien-Schnappschuss fehlgeschlagen: {}", e.getMessage());
+        }
     }
 
     /**
