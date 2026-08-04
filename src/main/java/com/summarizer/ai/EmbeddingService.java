@@ -100,7 +100,7 @@ public class EmbeddingService {
         }
         String vector = toVectorLiteral(vectors.getFirst());
         return jdbc.query("""
-                SELECT DISTINCT ON (i.id) i.id, i.title, i.type, i.source_url,
+                SELECT DISTINCT ON (i.id) i.id, i.title, i.type, i.source_url, i.summary,
                        e.chunk_text, (e.embedding <=> ?::vector) AS distance
                 FROM item_embeddings e
                 JOIN items i ON i.id = e.item_id
@@ -112,7 +112,8 @@ public class EmbeddingService {
                         rs.getString("type"),
                         rs.getString("source_url"),
                         rs.getString("chunk_text"),
-                        rs.getDouble("distance")),
+                        rs.getDouble("distance"),
+                        rs.getString("summary")),
                 vector, userId)
                 .stream()
                 .sorted((a, b) -> Double.compare(a.distance(), b.distance()))
@@ -143,6 +144,6 @@ public class EmbeddingService {
     }
 
     public record SearchHit(Long itemId, String title, String type, String sourceUrl,
-                            String chunkText, double distance) {
+                            String chunkText, double distance, String summary) {
     }
 }

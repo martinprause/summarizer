@@ -36,21 +36,13 @@ public class RagService {
         if (hits.isEmpty()) {
             return new Prompt(null, List.of());
         }
-        StringBuilder context = new StringBuilder();
-        for (int i = 0; i < hits.size(); i++) {
-            EmbeddingService.SearchHit hit = hits.get(i);
-            String chunk = hit.chunkText();
-            if (chunk.length() > MAX_CHUNK_CHARS) {
-                chunk = chunk.substring(0, MAX_CHUNK_CHARS);
-            }
-            context.append("[").append(i + 1).append("] ")
-                    .append(hit.title() == null ? "(ohne Titel)" : hit.title())
-                    .append(":\n").append(chunk).append("\n\n");
-        }
+        String context = buildContext(hits);
         String prompt = """
                 Du bist der Assistent eines persönlichen Wissensarchivs. Beantworte die Frage \
                 AUSSCHLIESSLICH mit den folgenden Auszügen und Wissensgraph-Fakten aus dem Archiv. \
-                Wenn sie die Frage nicht beantworten, sage das ehrlich. \
+                Deckt ein Auszug das Thema nur teilweise ab, gib wieder, was das Archiv dazu \
+                enthält, und nenne die Quelle — antworte nur dann mit "dazu findet sich nichts", \
+                wenn KEIN Auszug thematisch passt. \
                 Verweise auf Quellen in der Form [1], [2]. Antworte in Markdown.
 
                 %s
@@ -62,9 +54,28 @@ public class RagService {
 
                 Antwort (auf Deutsch, knapp und präzise):
                 """.formatted(PromptSanitizer.GUARD_NOTE,
-                PromptSanitizer.wrapUntrusted(context.toString(), 30_000),
+                PromptSanitizer.wrapUntrusted(context, 30_000),
                 buildGraphContext(userId, question), question);
         return new Prompt(prompt, hits);
+    }
+
+    /** Auszüge: Titel + Zusammenfassung (Kernaussage!) + bester Chunk je Quelle. */
+    private String buildContext(List<EmbeddingService.SearchHit> hits) {
+        StringBuilder context = new StringBuilder();
+        for (int i = 0; i < hits.size(); i++) {
+            EmbeddingService.SearchHit hit = hits.get(i);
+            String chunk = hit.chunkText();
+            if (chunk.length() > MAX_CHUNK_CHARS) {
+                chunk = chunk.substring(0, MAX_CHUNK_CHARS);
+            }
+            context.append("[").append(i + 1).append("] ")
+                    .append(hit.title() == null ? "(ohne Titel)" : hit.title()).append(":\n");
+            if (hit.summary() != null && !hit.summary().isBlank()) {
+                context.append("Zusammenfassung: ").append(hit.summary()).append('\n');
+            }
+            context.append(chunk).append("\n\n");
+        }
+        return context.toString();
     }
 
     public record Prompt(String text, List<EmbeddingService.SearchHit> sources) {
@@ -77,24 +88,15 @@ public class RagService {
                     + "passenden Inhalte gespeichert oder Ollama ist nicht erreichbar.", List.of());
         }
 
-        StringBuilder context = new StringBuilder();
-        for (int i = 0; i < hits.size(); i++) {
-            EmbeddingService.SearchHit hit = hits.get(i);
-            String chunk = hit.chunkText();
-            if (chunk.length() > MAX_CHUNK_CHARS) {
-                chunk = chunk.substring(0, MAX_CHUNK_CHARS);
-            }
-            context.append("[").append(i + 1).append("] ")
-                    .append(hit.title() == null ? "(ohne Titel)" : hit.title())
-                    .append(":\n").append(chunk).append("\n\n");
-        }
-
+        String context = buildContext(hits);
         String graphContext = buildGraphContext(userId, question);
 
         String prompt = """
                 Du bist der Assistent eines persönlichen Wissensarchivs. Beantworte die Frage \
                 AUSSCHLIESSLICH mit den folgenden Auszügen und Wissensgraph-Fakten aus dem Archiv. \
-                Wenn sie die Frage nicht beantworten, sage das ehrlich. \
+                Deckt ein Auszug das Thema nur teilweise ab, gib wieder, was das Archiv dazu \
+                enthält, und nenne die Quelle — antworte nur dann mit "dazu findet sich nichts", \
+                wenn KEIN Auszug thematisch passt. \
                 Verweise auf Quellen in der Form [1], [2].
 
                 Auszüge:
