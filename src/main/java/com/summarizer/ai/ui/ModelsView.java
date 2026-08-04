@@ -78,6 +78,7 @@ public class ModelsView extends VerticalLayout {
                 return;
             }
             settings.set(OllamaClient.CHAT_MODEL_KEY, e.getValue());
+            ollama.resetModelCache();
             Notification.show(getTranslation("models.chatModelSet", e.getValue()));
         });
 
@@ -108,6 +109,7 @@ public class ModelsView extends VerticalLayout {
         confirm.addCancelListener(e -> embeddingModelBox.setValue(previousModel));
         confirm.addConfirmListener(e -> {
             settings.set(OllamaClient.EMBEDDING_MODEL_KEY, newModel);
+            ollama.resetModelCache();
             openReembedDialog();
         });
         confirm.open();

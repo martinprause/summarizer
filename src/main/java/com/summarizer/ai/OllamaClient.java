@@ -72,6 +72,39 @@ public class OllamaClient {
         }
     }
 
+    /** true sobald Chat- UND Embedding-Modell installiert sind (danach gecacht). */
+    private volatile boolean requiredModelsSeen = false;
+
+    /**
+     * Sind die Pflicht-Modelle (Chat + Embedding) installiert? Ohne sie darf die
+     * Pipeline nicht verarbeiten — es entstünden leere Items (Ollama liefert 404).
+     * Einmal true bleibt gecacht, bis das aktive Modell wechselt.
+     */
+    public boolean requiredModelsReady() {
+        if (requiredModelsSeen) {
+            return true;
+        }
+        try {
+            List<String> installed = listModels().stream().map(ModelInfo::name).toList();
+            for (String required : List.of(chatModel(), embeddingModel())) {
+                boolean present = installed.stream().anyMatch(name -> name.equals(required)
+                        || name.equals(required + ":latest") || required.equals(name + ":latest"));
+                if (!present) {
+                    return false;
+                }
+            }
+            requiredModelsSeen = true;
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Cache zurücksetzen — beim Modellwechsel im Studio aufrufen. */
+    public void resetModelCache() {
+        requiredModelsSeen = false;
+    }
+
     /**
      * Max. 2 gleichzeitige Generierungen: mehr parallele Anfragen bringen auf
      * CPU nichts und haben Ollama unter Last zum Absturz gebracht (alle
@@ -252,11 +285,54 @@ public class OllamaClient {
         }
     }
 
-    /** Modell herunterladen (POST /api/pull, blockierend — im Async-Kontext aufrufen). */
+    /** Modell herunterladen (blockierend — im Async-Kontext aufrufen). */
     public void pull(String model) {
-        longRunningClient.post().uri("/api/pull")
-                .body(Map.of("model", model, "stream", false))
-                .retrieve().toBodilessEntity();
+        pull(model, null);
+    }
+
+    /**
+     * Modell herunterladen mit Fortschritts-Callback (0-100). Streaming-Pull:
+     * Ollama liefert pro Layer completed/total — daraus wird der Prozentwert.
+     */
+    public void pull(String model, java.util.function.IntConsumer onPercent) {
+        try {
+            var mapper = new tools.jackson.databind.ObjectMapper();
+            var httpClient = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build();
+            String body = mapper.writeValueAsString(Map.of("model", model, "stream", true));
+            var request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(baseUrl + "/api/pull"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofHours(2))
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            var response = httpClient.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofLines());
+            final String[] error = {null};
+            response.body().forEach(line -> {
+                if (line.isBlank()) {
+                    return;
+                }
+                var node = mapper.readTree(line);
+                if (node.has("error")) {
+                    error[0] = node.get("error").asText();
+                }
+                long total = node.path("total").asLong(0);
+                long completed = node.path("completed").asLong(0);
+                if (onPercent != null && total > 0) {
+                    onPercent.accept((int) Math.clamp(completed * 100 / total, 0, 100));
+                }
+            });
+            if (error[0] != null) {
+                throw new IllegalStateException(error[0]);
+            }
+        } catch (java.io.IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new IllegalStateException("Pull fehlgeschlagen: " + e.getMessage(), e);
+        }
     }
 
     /** Modell löschen (DELETE /api/delete). */

@@ -44,6 +44,7 @@ public class MainLayout extends AppLayout {
 
     private final com.summarizer.ai.WhisperClient whisper;
     private final com.summarizer.item.pipeline.PipelineEtaService eta;
+    private final com.summarizer.ai.OllamaAdminService ollamaAdmin;
 
     public MainLayout(AuthenticationContext authContext,
                       com.summarizer.settings.AppSettingsService settings,
@@ -52,13 +53,15 @@ public class MainLayout extends AppLayout {
                       com.summarizer.base.CurrentUser currentUser,
                       com.summarizer.ai.OllamaClient ollama,
                       com.summarizer.ai.WhisperClient whisper,
-                      com.summarizer.item.pipeline.PipelineEtaService eta) {
+                      com.summarizer.item.pipeline.PipelineEtaService eta,
+                      com.summarizer.ai.OllamaAdminService ollamaAdmin) {
         this.jdbc = jdbc;
         this.jobs = jobs;
         this.currentUser = currentUser;
         this.ollama = ollama;
         this.whisper = whisper;
         this.eta = eta;
+        this.ollamaAdmin = ollamaAdmin;
         com.vaadin.flow.component.html.Div logo = new com.vaadin.flow.component.html.Div();
         logo.setText("S");
         logo.addClassName("s-logo");
@@ -270,7 +273,14 @@ public class MainLayout extends AppLayout {
             StringBuilder text = new StringBuilder();
             java.util.List<String> missing = missingModels();
             if (!missing.isEmpty()) {
-                text.append(getTranslation("nav.modelsLoading", String.join(", ", missing)));
+                // Download-Fortschritt je Modell anhängen ("qwen3.5:4b 42%")
+                String decorated = missing.stream()
+                        .map(model -> {
+                            int percent = ollamaAdmin.percentOf(model);
+                            return percent >= 0 ? model + " " + percent + "%" : model;
+                        })
+                        .collect(java.util.stream.Collectors.joining(", "));
+                text.append(getTranslation("nav.modelsLoading", decorated));
             }
             jobs.anyRunning().ifPresent(job -> {
                 if (!text.isEmpty()) {

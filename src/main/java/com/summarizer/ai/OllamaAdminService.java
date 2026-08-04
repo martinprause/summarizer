@@ -18,6 +18,7 @@ public class OllamaAdminService {
 
     private final OllamaClient ollama;
     private final Map<String, String> pullStatus = new ConcurrentHashMap<>();
+    private final Map<String, Integer> pullPercent = new ConcurrentHashMap<>();
 
     public OllamaAdminService(OllamaClient ollama) {
         this.ollama = ollama;
@@ -26,14 +27,25 @@ public class OllamaAdminService {
     @Async
     public void pullAsync(String model) {
         pullStatus.put(model, "lädt …");
+        pullPercent.put(model, 0);
         try {
-            ollama.pull(model);
+            ollama.pull(model, percent -> {
+                pullPercent.put(model, percent);
+                pullStatus.put(model, "lädt … " + percent + "%");
+            });
             pullStatus.put(model, "fertig ✓");
+            pullPercent.remove(model);
             log.info("Modell {} heruntergeladen", model);
         } catch (Exception e) {
             pullStatus.put(model, "Fehler: " + e.getMessage());
+            pullPercent.remove(model);
             log.warn("Modell-Pull {} fehlgeschlagen: {}", model, e.getMessage());
         }
+    }
+
+    /** Download-Fortschritt 0-100, -1 wenn für das Modell kein Pull läuft. */
+    public int percentOf(String model) {
+        return pullPercent.getOrDefault(model, -1);
     }
 
     /**

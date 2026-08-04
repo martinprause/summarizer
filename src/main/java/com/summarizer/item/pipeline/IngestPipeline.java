@@ -89,15 +89,15 @@ public class IngestPipeline {
         if (item == null) {
             return;
         }
-        // Ohne erreichbares Ollama entstuenden leere "DONE"-Items (keine Zusammenfassung,
-        // keine Vektoren). Item bleibt PENDING — der PipelineResumer holt es nach,
-        // sobald Ollama wieder da ist.
-        if (!ollama.isAvailable()) {
+        // Ohne erreichbares Ollama UND installierte Pflicht-Modelle entstuenden leere
+        // "DONE"-Items (keine Zusammenfassung, keine Vektoren). Item bleibt PENDING —
+        // der PipelineResumer holt es nach, sobald Modelle da sind (Auto-Pull läuft).
+        if (!ollama.isAvailable() || !ollama.requiredModelsReady()) {
             if (item.getStatus() != Item.Status.PENDING) {
                 item.setStatus(Item.Status.PENDING);
                 items.save(item);
             }
-            log.warn("Item {}: Ollama nicht erreichbar — Verarbeitung zurückgestellt", itemId);
+            log.warn("Item {}: Ollama/Modelle noch nicht bereit — Verarbeitung zurückgestellt", itemId);
             return;
         }
         item.setStatus(Item.Status.PROCESSING);
