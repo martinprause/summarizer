@@ -106,6 +106,8 @@ public class TasksView extends VerticalLayout {
         add(tabs);
 
         gantt.setWidthFull();
+        // Feste Mindesthoehe — als Flex-Kind kollabiert die SVG-Flaeche sonst
+        gantt.setMinHeight("460px");
         ganttEmpty.setText(getTranslation("tasks.noneGantt"));
         ganttEmpty.getStyle().set("color", "var(--lumo-secondary-text-color)");
         ganttEmpty.setVisible(false);
@@ -171,7 +173,7 @@ public class TasksView extends VerticalLayout {
                 refresh();
             });
             return badge;
-        }).setHeader(getTranslation("tasks.column.status")).setAutoWidth(true).setFlexGrow(0);
+        }).setHeader(getTranslation("tasks.column.status")).setWidth("130px").setFlexGrow(0);
 
         grid.addColumn(Task::getTitle).setHeader(getTranslation("tasks.column.title")).setFlexGrow(1);
         grid.addColumn(t -> t.getStartDate() == null ? "" : DATE.format(t.getStartDate()))

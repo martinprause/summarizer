@@ -40,6 +40,11 @@ class TaskGanttElement extends ReactAdapterElement {
                 ganttRef.current = new Gantt(el, tasks.map((t) => ({ ...t })), {
                     view_mode: viewMode || 'Week',
                     language: document.documentElement.lang === 'en' ? 'en' : 'de',
+                    // Drag/Resize aktiv; unendliches Seiten-Padding stoert die Maus-Gesten
+                    readonly: false,
+                    infinite_padding: false,
+                    container_height: 420,
+                    snap_at: '1d',
                     on_click: (task: any) => dispatch('task-click', { taskId: task.id }),
                     on_date_change: (task: any, start: Date, end: Date) =>
                         dispatch('task-move', { taskId: task.id, start: fmt(start), end: fmt(end) }),
@@ -59,7 +64,8 @@ class TaskGanttElement extends ReactAdapterElement {
             }
         }, [tasks, viewMode]);
 
-        return <div ref={containerRef} style={{ width: '100%', overflowX: 'auto' }} />;
+        return <div ref={containerRef}
+                    style={{ width: '100%', minHeight: '440px', overflowX: 'auto', overflowY: 'visible' }} />;
     }
 }
 
