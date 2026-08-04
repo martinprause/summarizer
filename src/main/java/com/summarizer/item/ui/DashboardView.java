@@ -268,6 +268,14 @@ public class DashboardView extends HorizontalLayout {
         searchField.setPlaceholder(getTranslation("dashboard.filter.search.placeholder"));
         searchField.setWidth("220px");
         searchField.setClearButtonVisible(true);
+        // Live-Suche: nach kurzer Tipp-Pause automatisch suchen, kein Klick noetig
+        searchField.setValueChangeMode(com.vaadin.flow.data.value.ValueChangeMode.LAZY);
+        searchField.setValueChangeTimeout(500);
+        searchField.addValueChangeListener(e -> {
+            if (e.isFromClient()) {
+                reload();
+            }
+        });
 
         categoryBox.setPlaceholder(getTranslation("dashboard.filter.category"));
         categoryBox.setItems(categories.findByUserIdOrderBySortOrderAscNameAsc(user.getId()));

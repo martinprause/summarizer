@@ -1,9 +1,8 @@
 import { ReactAdapterElement, type RenderHooks } from 'Frontend/generated/flow/ReactAdapter';
+// frappe-gantt 0.6.1 als ESM-Quelle (Default-Export, Styles via SCSS-Import —
+// sass-embedded ist als devDependency installiert)
 // @ts-ignore — kein Typpaket vorhanden
 import Gantt from 'frappe-gantt';
-// Exports-Feld des Pakets erlaubt keinen CSS-Subpath-Import — direkt aus node_modules laden
-// @ts-ignore — CSS-Import ohne Typdeklaration
-import '../../../../node_modules/frappe-gantt/dist/frappe-gantt.css';
 import React, { type ReactElement, useEffect, useRef } from 'react';
 
 type GTask = {
@@ -37,14 +36,14 @@ class TaskGanttElement extends ReactAdapterElement {
             const fmt = (d: Date) =>
                 `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             try {
+                // frappe-gantt 0.6.1: stabiles Drag/Resize (1.x bricht in
+                // eingebetteten Containern) — Optionen der 0.6er-API
                 ganttRef.current = new Gantt(el, tasks.map((t) => ({ ...t })), {
                     view_mode: viewMode || 'Week',
-                    language: document.documentElement.lang === 'en' ? 'en' : 'de',
-                    // Drag/Resize aktiv; unendliches Seiten-Padding stoert die Maus-Gesten
-                    readonly: false,
-                    infinite_padding: false,
-                    container_height: 420,
-                    snap_at: '1d',
+                    // 0.6.1 kennt nur en/es/ru — 'de' laesst make_dates crashen
+                    language: 'en',
+                    bar_height: 24,
+                    padding: 20,
                     on_click: (task: any) => dispatch('task-click', { taskId: task.id }),
                     on_date_change: (task: any, start: Date, end: Date) =>
                         dispatch('task-move', { taskId: task.id, start: fmt(start), end: fmt(end) }),

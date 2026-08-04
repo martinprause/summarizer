@@ -13,7 +13,7 @@ import java.util.List;
  * Gantt-Diagramm auf Basis von frappe-gantt (gleiches Adapter-Muster
  * wie der Wissensgraph). Balken ziehen ändert Start/Fälligkeit.
  */
-@NpmPackage(value = "frappe-gantt", version = "1.0.3")
+@NpmPackage(value = "frappe-gantt", version = "0.6.1")
 @JsModule("./components/task-gantt-adapter.tsx")
 @Tag("task-gantt-adapter")
 public class TaskGanttComponent extends ReactAdapterComponent implements HasSize {

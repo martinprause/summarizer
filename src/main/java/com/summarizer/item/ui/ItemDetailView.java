@@ -161,6 +161,7 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
                 Notification.show(getTranslation("detail.retranscribeStarted"));
                 removeAll();
                 render(items.findById(item.getId()).orElse(item));
+                watchAndRerender(item.getId());
             });
             retranscribe.addThemeVariants(ButtonVariant.LUMO_SMALL);
             add(retranscribe);
@@ -255,6 +256,36 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
         HorizontalLayout row = new HorizontalLayout(tags, save);
         row.setAlignItems(Alignment.END);
         add(row);
+    }
+
+    /** Nach Neu-Verarbeitung: View per Push aktualisieren, sobald die Pipeline fertig ist. */
+    private void watchAndRerender(Long itemId) {
+        getUI().ifPresent(ui -> Thread.ofVirtual().start(() -> {
+            try {
+                for (int i = 0; i < 120; i++) {
+                    Thread.sleep(3000);
+                    Item current = items.findById(itemId).orElse(null);
+                    if (current == null) {
+                        return;
+                    }
+                    if (current.getStatus() == Item.Status.DONE
+                            || current.getStatus() == Item.Status.FAILED) {
+                        ui.access(() -> {
+                            removeAll();
+                            render(current);
+                            Notification.show(getTranslation(
+                                    current.getStatus() == Item.Status.DONE
+                                            ? "detail.reprocessed" : "detail.reprocessFailed"));
+                        });
+                        return;
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                // Seite geschlossen — Wächter beenden
+            }
+        }));
     }
 
     /** Aufgaben: zugeordnete anzeigen (Chip mit ✕), bestehende wählen oder neue anlegen. */
