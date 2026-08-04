@@ -211,6 +211,36 @@ public class GraphService {
                 params);
     }
 
+    public record ItemNode(long itemId, String title, String type, long entityId) {
+    }
+
+    /** Inhalte zu den sichtbaren Entitäten — für die bipartite Graph-Ansicht. */
+    public List<ItemNode> itemsForEntities(Long userId, java.util.Collection<Long> entityIds, int limit) {
+        if (entityIds.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = String.join(",",
+                java.util.Collections.nCopies(entityIds.size(), "?"));
+        Object[] params = new Object[entityIds.size() + 2];
+        params[0] = userId;
+        int i = 1;
+        for (Long id : entityIds) {
+            params[i++] = id;
+        }
+        params[i] = limit;
+        return jdbc.query("""
+                SELECT i.id, i.title, i.type, ie.entity_id
+                FROM item_entities ie
+                JOIN items i ON i.id = ie.item_id
+                WHERE i.user_id = ? AND ie.entity_id IN (%s)
+                ORDER BY i.created_at DESC
+                LIMIT ?
+                """.formatted(placeholders),
+                (rs, n) -> new ItemNode(rs.getLong("id"), rs.getString("title"),
+                        rs.getString("type"), rs.getLong("entity_id")),
+                params);
+    }
+
     /** Kompletten Graph eines Users löschen (Relationen + Verknüpfungen via CASCADE). */
     @Transactional
     public void deleteAllForUser(Long userId) {

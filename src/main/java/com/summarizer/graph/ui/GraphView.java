@@ -53,6 +53,11 @@ public class GraphView extends VerticalLayout {
     private final com.vaadin.flow.component.checkbox.Checkbox strongEdges =
             new com.vaadin.flow.component.checkbox.Checkbox();
     private boolean strongEdgesInitialized;
+    private final com.vaadin.flow.component.checkbox.Checkbox showItems =
+            new com.vaadin.flow.component.checkbox.Checkbox();
+    private final com.vaadin.flow.component.combobox.ComboBox<GraphService.Entity> focusBox =
+            new com.vaadin.flow.component.combobox.ComboBox<>();
+    private java.util.Set<Long> focusIds;   // null = kein Fokus (2-Hop-Ego-Netz)
 
     public GraphView(GraphService graph, GraphExtractionService extraction, CurrentUser currentUser,
                      com.summarizer.base.JobProgressService jobs,
@@ -116,8 +121,28 @@ public class GraphView extends VerticalLayout {
             }
         });
 
+        showItems.setLabel(getTranslation("graph.showItems"));
+        showItems.addValueChangeListener(e -> {
+            if (e.isFromClient()) {
+                refresh();
+            }
+        });
+
+        // Fokus: Begriff wählen -> nur seine 2-Hop-Umgebung anzeigen
+        focusBox.setPlaceholder(getTranslation("graph.focus.placeholder"));
+        focusBox.setItemLabelGenerator(GraphService.Entity::name);
+        focusBox.setClearButtonVisible(true);
+        focusBox.setWidth("220px");
+        focusBox.addValueChangeListener(e -> {
+            if (!e.isFromClient()) {
+                return;
+            }
+            focusIds = e.getValue() == null ? null : egoNetwork(e.getValue().id());
+            refresh();
+        });
+
         HorizontalLayout toolbar = new HorizontalLayout(backfill, refresh, editPrompt,
-                filterField, applyFilter, clearFilter, topN, strongEdges);
+                filterField, applyFilter, clearFilter, focusBox, topN, strongEdges, showItems);
         toolbar.setAlignItems(Alignment.END);
         toolbar.getStyle().set("flex-wrap", "wrap");
         add(toolbar);
@@ -148,7 +173,7 @@ public class GraphView extends VerticalLayout {
                 .setHeader(getTranslation("graph.column.to")).setAutoWidth(true);
         relationGrid.setSizeFull();
 
-        flow.addNodeClickListener(this::showEntityItems);
+        flow.addNodeClickListener(this::onNodeClick);
 
         Tab graphTab = new Tab(getTranslation("graph.tab.graph"));
         Tab entitiesTab = new Tab(getTranslation("graph.tab.entities"));
@@ -167,6 +192,39 @@ public class GraphView extends VerticalLayout {
         add(tabs, pages);
         setFlexGrow(1, pages);
         refresh();
+    }
+
+    /** 2-Hop-Nachbarschaft eines Begriffs (Fokusmodus). */
+    private java.util.Set<Long> egoNetwork(long entityId) {
+        java.util.Map<Long, java.util.Set<Long>> adjacency = new java.util.HashMap<>();
+        for (GraphService.Relation r : graph.relations(currentUser.id())) {
+            adjacency.computeIfAbsent(r.sourceId(), k -> new java.util.HashSet<>()).add(r.targetId());
+            adjacency.computeIfAbsent(r.targetId(), k -> new java.util.HashSet<>()).add(r.sourceId());
+        }
+        java.util.Set<Long> result = new java.util.HashSet<>();
+        result.add(entityId);
+        java.util.Set<Long> frontier = java.util.Set.of(entityId);
+        for (int hop = 0; hop < 2; hop++) {
+            java.util.Set<Long> next = new java.util.HashSet<>();
+            for (Long id : frontier) {
+                next.addAll(adjacency.getOrDefault(id, java.util.Set.of()));
+            }
+            next.removeAll(result);
+            result.addAll(next);
+            frontier = next;
+        }
+        return result;
+    }
+
+    /** Knoten-Klick: Inhalts-Knoten öffnet die Detail-Ansicht, Begriff den Item-Dialog. */
+    private void onNodeClick(String nodeId) {
+        if (nodeId.startsWith("i")) {
+            getUI().ifPresent(ui -> ui.access(() -> ui.navigate(
+                    com.summarizer.item.ui.ItemDetailView.class,
+                    Long.parseLong(nodeId.substring(1)))));
+            return;
+        }
+        showEntityItems(Long.parseLong(nodeId));
     }
 
     /** Knoten-Klick: zugehörige Items als Dialog mit Links zur Detail-Ansicht. */
@@ -268,6 +326,18 @@ public class GraphView extends VerticalLayout {
     private void refresh() {
         List<GraphService.Entity> entities = graph.entities(currentUser.id());
         List<GraphService.Relation> relations = graph.relations(currentUser.id());
+        focusBox.setItems(entities);
+
+        // Fokusmodus: nur 2-Hop-Umgebung des gewählten Begriffs
+        if (focusIds != null) {
+            entities = entities.stream().filter(e -> focusIds.contains(e.id())).toList();
+            java.util.Set<Long> inFocus = entities.stream()
+                    .map(GraphService.Entity::id)
+                    .collect(java.util.stream.Collectors.toSet());
+            relations = relations.stream()
+                    .filter(r -> inFocus.contains(r.sourceId()) && inFocus.contains(r.targetId()))
+                    .toList();
+        }
 
         if (filteredEntityIds != null) {
             entities = entities.stream()
@@ -317,16 +387,38 @@ public class GraphView extends VerticalLayout {
                 .filter(r -> !Boolean.TRUE.equals(strongEdges.getValue()) || r.weight() >= 2)
                 .toList();
 
-        List<GraphFlowComponent.GraphNode> nodes = entities.stream()
+        List<GraphFlowComponent.GraphNode> nodes = new java.util.ArrayList<>(entities.stream()
                 .map(e -> new GraphFlowComponent.GraphNode(
-                        String.valueOf(e.id()), e.name(), e.type(), e.degree(), colorFor(e)))
-                .toList();
+                        String.valueOf(e.id()), e.name(), e.type(), e.degree(), colorFor(e), "entity"))
+                .toList());
         List<GraphFlowComponent.GraphEdge> edges = new java.util.ArrayList<>();
         int index = 0;
         for (GraphService.Relation r : graphRelations) {
             edges.add(new GraphFlowComponent.GraphEdge("e" + index++,
                     String.valueOf(r.sourceId()), String.valueOf(r.targetId()),
                     r.relation() == null ? "" : r.relation(), r.weight()));
+        }
+
+        // Bipartite Ansicht: Inhalte als Rechteck-Knoten an ihren Begriffen
+        if (Boolean.TRUE.equals(showItems.getValue()) && !visibleForGraph.isEmpty()) {
+            java.util.Map<Long, String> entityColor = entities.stream()
+                    .collect(java.util.stream.Collectors.toMap(GraphService.Entity::id, this::colorFor));
+            java.util.Set<Long> added = new java.util.HashSet<>();
+            for (GraphService.ItemNode item : graph.itemsForEntities(
+                    currentUser.id(), visibleForGraph, 150)) {
+                String nodeId = "i" + item.itemId();
+                if (added.add(item.itemId())) {
+                    String label = item.title() == null || item.title().isBlank()
+                            ? getTranslation("graph.items.untitled") : item.title();
+                    if (label.length() > 40) {
+                        label = label.substring(0, 40) + "…";
+                    }
+                    nodes.add(new GraphFlowComponent.GraphNode(nodeId, label, item.type(), 0,
+                            entityColor.getOrDefault(item.entityId(), "#bbbbbb"), "item"));
+                }
+                edges.add(new GraphFlowComponent.GraphEdge("e" + index++,
+                        String.valueOf(item.entityId()), nodeId, "", 1));
+            }
         }
         flow.setGraph(nodes, edges);
     }

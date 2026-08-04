@@ -16,7 +16,11 @@ import '@xyflow/react/dist/style.css';
 import dagre from '@dagrejs/dagre';
 import React, { type ReactElement, useCallback, useEffect, useState } from 'react';
 
-type GNode = { id: string; label: string; type: string; degree: number; color: string };
+type GNode = { id: string; label: string; type: string; degree: number; color: string; kind: string };
+
+const ITEM_ICONS: Record<string, string> = {
+    TEXT: '📝', WEBPAGE: '🌐', BOOKMARK: '🔖', FILE: '📄', AUDIO: '🎙', IMAGE: '🖼',
+};
 type GEdge = { id: string; source: string; target: string; label: string; weight: number };
 
 const FALLBACK_COLOR = '#546e7a';
@@ -65,12 +69,16 @@ class KnowledgeGraphElement extends ReactAdapterElement {
         useEffect(() => {
             const positions = layoutPositions(gNodes ?? [], gEdges ?? []);
             setNodes((gNodes ?? []).map((n) => {
-                const w = nodeWidth(n.label);
+                const isItem = n.kind === 'item';
+                const label = isItem
+                    ? `${ITEM_ICONS[n.type] ?? '📄'} ${n.label}`
+                    : `${n.label}${n.degree > 0 ? ` (${n.degree})` : ''}`;
+                const w = nodeWidth(label);
                 const h = 38;
                 return {
                     id: n.id,
                     position: positions.get(n.id) ?? { x: 0, y: 0 },
-                    data: { label: `${n.label}${n.degree > 0 ? ` (${n.degree})` : ''}` },
+                    data: { label },
                     // SSR-Pfad: explizite Maße + Handle-Koordinaten, weil die DOM-Messung
                     // in der Web-Component-Einbettung nicht feuert — ohne sie keine Kanten.
                     width: w,
@@ -79,7 +87,15 @@ class KnowledgeGraphElement extends ReactAdapterElement {
                         { type: 'source' as const, position: Position.Right, x: w, y: h / 2, width: 6, height: 6 },
                         { type: 'target' as const, position: Position.Left, x: 0, y: h / 2, width: 6, height: 6 },
                     ],
-                    style: {
+                    // Inhalte = helle Rechtecke, Begriffe = farbige Pillen
+                    style: isItem ? {
+                        background: 'white',
+                        color: '#333',
+                        border: '1px solid ' + (n.color || '#bbb'),
+                        borderRadius: 6,
+                        padding: '5px 10px',
+                        fontSize: 11,
+                    } : {
                         background: n.color || FALLBACK_COLOR,
                         color: 'white',
                         border: 'none',

@@ -347,9 +347,13 @@ public class DashboardView extends HorizontalLayout {
                 VaadinIcon.FILE_ADD.create(), e -> openUploadDialog());
         uploadButton.setTooltipText(getTranslation("dashboard.upload.tooltip"));
 
+        Button pasteButton = new Button(getTranslation("dashboard.paste.button"),
+                VaadinIcon.PASTE.create(), e -> openPasteDialog());
+        pasteButton.setTooltipText(getTranslation("dashboard.paste.tooltip"));
+
         Div spacer = new Div();
         HorizontalLayout toolbar = new HorizontalLayout(label, sortBar, spacer, tiles, list,
-                importButton, uploadButton);
+                importButton, uploadButton, pasteButton);
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.setFlexGrow(1, spacer);
         toolbar.setWidthFull();
@@ -555,6 +559,56 @@ public class DashboardView extends HorizontalLayout {
     private void updateBulkBar() {
         selectionInfo.setText(getTranslation("dashboard.bulk.selected", selectedIds.size()));
         bulkBar.setVisible(true);
+    }
+
+    /** Text aus der Zwischenablage einfügen — läuft durch die komplette Pipeline. */
+    private void openPasteDialog() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("dashboard.paste.dialogTitle"));
+        dialog.setWidth("640px");
+        dialog.add(new Paragraph(getTranslation("dashboard.paste.dialogText")));
+
+        TextField title = new TextField(getTranslation("dashboard.paste.titleField"));
+        title.setWidthFull();
+        title.setPlaceholder(getTranslation("dashboard.paste.titlePlaceholder"));
+        com.vaadin.flow.component.textfield.TextArea text =
+                new com.vaadin.flow.component.textfield.TextArea(
+                        getTranslation("dashboard.paste.textField"));
+        text.setWidthFull();
+        text.setHeight("min(320px, 40vh)");
+
+        Button save = new Button(getTranslation("dashboard.paste.save"), e -> {
+            String value = text.getValue() == null ? "" : text.getValue().strip();
+            if (value.isEmpty()) {
+                text.setInvalid(true);
+                text.setErrorMessage(getTranslation("dashboard.paste.empty"));
+                return;
+            }
+            // Reine URL -> als Webseite behandeln (wie Telegram/API)
+            boolean isUrl = value.matches("https?://\\S+");
+            Item item = new Item(user.getId(), isUrl ? Item.Type.WEBPAGE : Item.Type.TEXT);
+            if (isUrl) {
+                item.setSourceUrl(value);
+            } else {
+                item.setRawText(value);
+            }
+            if (!title.getValue().isBlank()) {
+                item.setTitle(title.getValue().strip());
+            }
+            itemRepository.save(item);
+            pipeline.process(item.getId());
+            dialog.close();
+            Notification.show(getTranslation("dashboard.paste.saved"));
+            reload();
+        });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        save.addClickShortcut(com.vaadin.flow.component.Key.ENTER,
+                com.vaadin.flow.component.KeyModifier.CONTROL);
+
+        dialog.add(title, text);
+        dialog.getFooter().add(save);
+        dialog.open();
+        text.focus();
     }
 
     /** Datei-Upload direkt im Studio (PDF, Word, Bilder, …). */

@@ -19,8 +19,9 @@ import java.util.List;
 @Tag("knowledge-graph-adapter")
 public class GraphFlowComponent extends ReactAdapterComponent implements HasSize {
 
+    /** kind: "entity" (Pille) oder "item" (Rechteck — ein Inhalt aus dem Archiv). */
     public record GraphNode(String id, String label, String type, long degree,
-                            String color) implements Serializable {
+                            String color, String kind) implements Serializable {
     }
 
     public record GraphEdge(String id, String source, String target, String label,
@@ -29,7 +30,8 @@ public class GraphFlowComponent extends ReactAdapterComponent implements HasSize
 
     @FunctionalInterface
     public interface NodeClickListener extends Serializable {
-        void onNodeClick(long entityId);
+        /** nodeId: Entitäts-ID als Zahl oder "i&lt;itemId&gt;" für Inhalts-Knoten. */
+        void onNodeClick(String nodeId);
     }
 
     public GraphFlowComponent() {
@@ -46,7 +48,7 @@ public class GraphFlowComponent extends ReactAdapterComponent implements HasSize
     public void addNodeClickListener(NodeClickListener listener) {
         getElement().addEventListener("node-click", event -> {
             var detail = event.getEventData().get("event.detail");
-            listener.onNodeClick(Long.parseLong(detail.get("nodeId").asText()));
+            listener.onNodeClick(detail.get("nodeId").asText());
         }).addEventData("event.detail");
     }
 }
