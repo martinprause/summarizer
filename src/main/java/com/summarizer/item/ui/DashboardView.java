@@ -232,22 +232,48 @@ public class DashboardView extends HorizontalLayout {
         mainTree.setSizeFull();
         buildTreeContextMenu();
 
-        // Kacheln aus dem Inhaltsbereich hierher ziehen = Kategorie zuweisen
-        mainTree.setDropMode(com.vaadin.flow.component.grid.dnd.GridDropMode.ON_TOP);
+        // Drop-Ziele: Kacheln (Zuweisen) UND Kategorien (Umhängen/Sortieren)
+        mainTree.setDropMode(com.vaadin.flow.component.grid.dnd.GridDropMode.ON_TOP_OR_BETWEEN);
+        mainTree.setRowsDraggable(true);
+        mainTree.addDragStartListener(e -> draggedCategory = e.getDraggedItems().getFirst());
+        mainTree.addDragEndListener(e -> draggedCategory = null);
         mainTree.addDropListener(e -> {
-            if (draggedItemId == null) {
+            // Fall 1: Kachel aus dem Inhaltsbereich -> Kategorie zuweisen
+            if (draggedItemId != null) {
+                e.getDropTargetItem().ifPresent(category ->
+                        itemRepository.findByIdAndUserId(draggedItemId, user.getId()).ifPresent(item -> {
+                            item.setCategoryId(category.getId());
+                            item.setCategoryConfidence(1.0f);   // manuell = sicher
+                            itemRepository.save(item);
+                            Notification.show(getTranslation("dashboard.dnd.assigned",
+                                    category.getName()));
+                            reload();
+                        }));
+                draggedItemId = null;
                 return;
             }
-            e.getDropTargetItem().ifPresent(category ->
-                    itemRepository.findByIdAndUserId(draggedItemId, user.getId()).ifPresent(item -> {
-                        item.setCategoryId(category.getId());
-                        item.setCategoryConfidence(1.0f);   // manuell = sicher
-                        itemRepository.save(item);
-                        Notification.show(getTranslation("dashboard.dnd.assigned",
-                                category.getName()));
-                        reload();
-                    }));
-            draggedItemId = null;
+            // Fall 2: Kategorie im Baum verschieben — AUF = Unterkategorie,
+            // DAZWISCHEN = gleiche Ebene an dieser Position
+            if (draggedCategory == null) {
+                return;
+            }
+            Category target = e.getDropTargetItem().orElse(null);
+            if (target == null || target.getId().equals(draggedCategory.getId())) {
+                return;
+            }
+            if (categoryTree.wouldCreateCycle(user.getId(), draggedCategory, target)) {
+                Notification.show(getTranslation("dashboard.cat.cycle"));
+                return;
+            }
+            if (e.getDropLocation() == com.vaadin.flow.component.grid.dnd.GridDropLocation.ON_TOP) {
+                draggedCategory.setParentId(target.getId());
+                categoryRepository.save(draggedCategory);
+            } else {
+                moveNextTo(draggedCategory, target,
+                        e.getDropLocation() == com.vaadin.flow.component.grid.dnd.GridDropLocation.ABOVE);
+            }
+            draggedCategory = null;
+            refreshSidebarTree();
         });
         sidebar.add(mainTree);
         sidebar.setFlexGrow(1, mainTree);
@@ -337,6 +363,28 @@ public class DashboardView extends HorizontalLayout {
         dialog.add(new VerticalLayout(name, description));
         dialog.getFooter().add(save);
         dialog.open();
+    }
+
+    /** Kategorie auf die Ebene des Ziels holen und davor/dahinter einsortieren. */
+    private void moveNextTo(Category moved, Category target, boolean above) {
+        moved.setParentId(target.getParentId());
+        List<Category> siblings = new ArrayList<>(target.getParentId() == null
+                ? normalRoots()
+                : categoryTree.children(user.getId(),
+                        categoryRepository.findById(target.getParentId()).orElse(null)));
+        siblings.removeIf(c -> c.getId().equals(moved.getId()));
+        int index = 0;
+        for (int i = 0; i < siblings.size(); i++) {
+            if (siblings.get(i).getId().equals(target.getId())) {
+                index = above ? i : i + 1;
+                break;
+            }
+        }
+        siblings.add(index, moved);
+        for (int i = 0; i < siblings.size(); i++) {
+            siblings.get(i).setSortOrder(i);
+        }
+        categoryRepository.saveAll(siblings);
     }
 
     /** Innerhalb der eigenen Ebene eine Position nach oben/unten. */
@@ -1044,6 +1092,8 @@ public class DashboardView extends HorizontalLayout {
 
     /** Gerade gezogene Kachel (Item-ID) — Ziel ist der Kategorien-Baum links. */
     private Long draggedItemId;
+    /** Gerade gezogene Kategorie (Baum-interne Umsortierung). */
+    private Category draggedCategory;
 
     private Div renderCard(ItemQueryService.Card card) {
         Div div = new Div();
