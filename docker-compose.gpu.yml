@@ -1,0 +1,11 @@
+# Zusatzdatei fuer GPU-Betrieb: von den Installern per -f eingebunden,
+# wenn OLLAMA_GPU=1 in .env steht. Gibt Ollama Zugriff auf alle NVIDIA-GPUs.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -162,6 +162,21 @@ volumes:
 '@ | Out-File -Encoding utf8 "docker-compose.yml"
 }
 
+# GPU-Override: wird nur eingebunden, wenn OLLAMA_GPU=1 in .env steht
+if (-not (Test-Path "docker-compose.gpu.yml")) {
+    @'
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+'@ | Out-File -Encoding utf8 "docker-compose.gpu.yml"
+}
+
 # --- 2. Konfiguration abfragen ---
 if (-not (Test-Path ".env")) {
     Write-Host ""
@@ -204,18 +219,33 @@ WHISPER_MODEL=small
     Write-Host ".env existiert bereits - verwende bestehende Konfiguration."
 }
 
+# --- 2b. GPU einmalig erkennen: nutzbare NVIDIA-GPU -> Ollama mit GPU starten ---
+if ((Get-Content ".env" -Raw) -notmatch "OLLAMA_GPU=") {
+    Write-Host "Prüfe GPU-Unterstützung von Docker ..."
+    docker run --rm --gpus=all alpine true *>$null
+    $gpu = if ($LASTEXITCODE -eq 0) { "1" } else { "0" }
+    Add-Content ".env" "OLLAMA_GPU=$gpu"
+    if ($gpu -eq "1") {
+        Write-Host "NVIDIA-GPU erkannt - Ollama nutzt die GPU." -ForegroundColor Green
+    } else {
+        Write-Host "Keine nutzbare GPU gefunden - Ollama läuft auf der CPU."
+    }
+}
+
 # --- 3. Stack starten ---
 $envContent = Get-Content ".env" -Raw
 $profiles = @("--profile", "app")
 if ($envContent -match "OLLAMA_BASE_URL=http://ollama") { $profiles += @("--profile", "local-llm") }
 if ($envContent -match "WHISPER_MODEL=") { $profiles += @("--profile", "whisper") }
+$composeFiles = @("-f", "docker-compose.yml")
+if ($envContent -match "OLLAMA_GPU=1") { $composeFiles += @("-f", "docker-compose.gpu.yml") }
 Write-Host "Lade Images von Docker Hub ..."
-docker compose @profiles pull
+docker compose @composeFiles @profiles pull
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FEHLER: Images konnten nicht geladen werden - Internetverbindung prüfen." -ForegroundColor Red
     exit 1
 }
-docker compose @profiles up -d
+docker compose @composeFiles @profiles up -d
 if ($LASTEXITCODE -ne 0) { Write-Host "docker compose fehlgeschlagen." -ForegroundColor Red; exit 1 }
 
 # --- 3b. Start-Skripte ablegen + Desktop-Verknüpfung "Summarizer" ---
@@ -267,8 +297,12 @@ if ($LASTEXITCODE -ne 0) {
 $profiles = @("--profile", "app")
 if ((Get-Content ".env" -Raw) -match "OLLAMA_BASE_URL=http://ollama") { $profiles += @("--profile", "local-llm") }
 if ((Get-Content ".env" -Raw) -match "WHISPER_MODEL=") { $profiles += @("--profile", "whisper") }
+$composeFiles = @("-f", "docker-compose.yml")
+if (((Get-Content ".env" -Raw) -match "OLLAMA_GPU=1") -and (Test-Path "docker-compose.gpu.yml")) {
+    $composeFiles += @("-f", "docker-compose.gpu.yml")
+}
 
-docker compose @profiles up -d *>$null
+docker compose @composeFiles @profiles up -d *>$null
 
 # Auf die App warten, dann Browser öffnen
 for ($i = 0; $i -lt 90; $i++) {

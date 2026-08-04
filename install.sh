@@ -133,6 +133,21 @@ volumes:
 COMPOSE_EOF
 fi
 
+# GPU-Override: wird nur eingebunden, wenn OLLAMA_GPU=1 in .env steht
+if [[ ! -f docker-compose.gpu.yml ]]; then
+    cat > docker-compose.gpu.yml <<'GPU_EOF'
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+GPU_EOF
+fi
+
 # --- 2. Konfiguration abfragen ---
 if [[ ! -f .env ]]; then
     read -rp "Sprache deiner Inhalte? [1] Deutsch (Standard) [2] Englisch: " lang
@@ -179,16 +194,30 @@ else
     echo ".env existiert bereits - verwende bestehende Konfiguration."
 fi
 
+# --- 2b. GPU einmalig erkennen: nutzbare NVIDIA-GPU -> Ollama mit GPU starten ---
+if ! grep -q "^OLLAMA_GPU=" .env; then
+    echo "Prüfe GPU-Unterstützung von Docker ..."
+    if docker run --rm --gpus=all alpine true >/dev/null 2>&1; then
+        echo "OLLAMA_GPU=1" >> .env
+        echo "NVIDIA-GPU erkannt - Ollama nutzt die GPU."
+    else
+        echo "OLLAMA_GPU=0" >> .env
+        echo "Keine nutzbare GPU gefunden - Ollama läuft auf der CPU."
+    fi
+fi
+
 # --- 3. Stack starten ---
 PROFILES=(--profile app)
 grep -q "OLLAMA_BASE_URL=http://ollama" .env && PROFILES+=(--profile local-llm)
 grep -q "^WHISPER_MODEL=" .env && PROFILES+=(--profile whisper)
+COMPOSE_FILES=(-f docker-compose.yml)
+grep -q "^OLLAMA_GPU=1" .env && COMPOSE_FILES+=(-f docker-compose.gpu.yml)
 echo "Lade Images von Docker Hub ..."
-if ! docker compose "${PROFILES[@]}" pull; then
+if ! docker compose "${COMPOSE_FILES[@]}" "${PROFILES[@]}" pull; then
     echo "FEHLER: Images konnten nicht geladen werden - Internetverbindung prüfen." >&2
     exit 1
 fi
-docker compose "${PROFILES[@]}" up -d
+docker compose "${COMPOSE_FILES[@]}" "${PROFILES[@]}" up -d
 
 # --- 3b. Start-Skript ablegen (Doppelklick/Aufruf startet Container + Browser) ---
 if [[ ! -f summarizer-start.sh ]]; then
@@ -219,9 +248,11 @@ fi
 PROFILES=(--profile app)
 grep -q "OLLAMA_BASE_URL=http://ollama" .env 2>/dev/null && PROFILES+=(--profile local-llm)
 grep -q "WHISPER_MODEL=" .env 2>/dev/null && PROFILES+=(--profile whisper)
+COMPOSE_FILES=(-f docker-compose.yml)
+[[ -f docker-compose.gpu.yml ]] && grep -q "^OLLAMA_GPU=1" .env 2>/dev/null && COMPOSE_FILES+=(-f docker-compose.gpu.yml)
 
 echo "Starte Summarizer ..."
-docker compose "${PROFILES[@]}" up -d >/dev/null
+docker compose "${COMPOSE_FILES[@]}" "${PROFILES[@]}" up -d >/dev/null
 
 for i in $(seq 1 90); do
     if curl -sf -o /dev/null "${URL}/login"; then

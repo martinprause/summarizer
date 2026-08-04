@@ -135,6 +135,17 @@ public class ChatView extends VerticalLayout {
                     });
                     return;
                 }
+                // Stichwort statt Frage: NUR die Treffer zeigen, keine LLM-Antwort
+                if (!isQuestion(question)) {
+                    Div tiles = resultTiles(prompt.sources(), untitledText, relevancePattern);
+                    ui.access(() -> {
+                        messages.remove(streaming);
+                        messages.add(tiles);
+                        send.setEnabled(true);
+                        messages.getElement().executeJs("this.scrollTop = this.scrollHeight");
+                    });
+                    return;
+                }
                 StringBuilder buffer = new StringBuilder();
                 String full = llm.generateStreaming(prompt.text(), token -> {
                     buffer.append(token);
@@ -161,6 +172,27 @@ public class ChatView extends VerticalLayout {
                 });
             }
         });
+    }
+
+    /**
+     * Echte Frage oder nur Suchbegriff? Fragen bekommen eine LLM-Antwort,
+     * Stichwörter ("epo", "diablo builds") nur die Treffer-Kacheln.
+     */
+    static boolean isQuestion(String query) {
+        String q = query.strip().toLowerCase();
+        if (q.contains("?")) {
+            return true;
+        }
+        String first = q.split("\\s+")[0];
+        boolean interrogative = java.util.Set.of(
+                "was", "wie", "warum", "wieso", "weshalb", "wann", "wer", "wo", "woher",
+                "wohin", "welche", "welcher", "welches", "womit", "wodurch", "wozu",
+                "gibt", "ist", "sind", "hat", "haben", "kann", "muss", "soll",
+                "fasse", "erkläre", "erklaere", "beschreibe", "vergleiche", "liste", "zeige",
+                "what", "how", "why", "when", "who", "where", "which", "is", "are",
+                "does", "do", "can", "summarize", "explain", "describe", "compare", "list")
+                .contains(first);
+        return interrogative || q.split("\\s+").length >= 4;
     }
 
     private Div bubble(String text, boolean own) {
