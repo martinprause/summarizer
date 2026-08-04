@@ -68,22 +68,24 @@ You only need the full repository for development.
 
 ### Windows
 
-Easiest: download **`Summarizer-Setup.exe`** from the releases page and
-double-click it - a graphical wizard with folder picker, language and LLM
+Easiest: download **[⬇ Summarizer-Setup.exe](https://github.com/martinprause/summarizer/releases/latest/download/Summarizer-Setup.exe)**
+and double-click it - a graphical wizard with folder picker, language and LLM
 selection and a progress view. It also creates the **"Summarizer"** desktop
 shortcut (starts Docker, the containers and the browser with one click).
 
 Alternatively via script:
 
-1. Put **`install.bat`** and **`install.ps1`** into an empty folder
-   (e.g. `C:\Summarizer`)
+1. Put **[⬇ install.bat](https://github.com/martinprause/summarizer/releases/latest/download/install.bat)**
+   and **[⬇ install.ps1](https://github.com/martinprause/summarizer/releases/latest/download/install.ps1)**
+   into an empty folder (e.g. `C:\Summarizer`)
 2. Double-click **`install.bat`**
 3. Answer the questions: content language, local LLM yes/no
 4. The browser opens **http://localhost:8181** automatically
 
 ### Linux / macOS
 
-Put **`install.sh`** into an empty folder, then:
+Put **[⬇ install.sh](https://github.com/martinprause/summarizer/releases/latest/download/install.sh)**
+into an empty folder, then:
 
 ```bash
 chmod +x install.sh
@@ -112,8 +114,7 @@ it in the studio.
 
 Saves web pages, selected text and images with one click or via the context menu.
 
-1. Download **`summarizer-chrome-extension.zip`** from the
-   [releases page](https://github.com/martinprause/summarizer/releases/latest)
+1. Download **[⬇ summarizer-chrome-extension.zip](https://github.com/martinprause/summarizer/releases/latest/download/summarizer-chrome-extension.zip)**
    and unzip it into a permanent folder (e.g. `C:\Summarizer\chrome-extension`) -
    Chrome loads the extension from there, so the folder must not be deleted
 2. Open Chrome → address bar: `chrome://extensions`

@@ -68,22 +68,24 @@ wer selbst entwickeln will.
 
 ### Windows
 
-Am einfachsten: **`Summarizer-Setup.exe`** von der Releases-Seite laden und
-doppelklicken - grafischer Assistent mit Ordnerwahl, Sprach- und LLM-Auswahl,
-Fortschrittsanzeige. Legt automatisch die Desktop-Verknüpfung **„Summarizer"**
-an (startet Docker, Container und Browser mit einem Klick).
+Am einfachsten: **[⬇ Summarizer-Setup.exe](https://github.com/martinprause/summarizer/releases/latest/download/Summarizer-Setup.exe)**
+laden und doppelklicken - grafischer Assistent mit Ordnerwahl, Sprach- und
+LLM-Auswahl, Fortschrittsanzeige. Legt automatisch die Desktop-Verknüpfung
+**„Summarizer"** an (startet Docker, Container und Browser mit einem Klick).
 
 Alternativ per Skript:
 
-1. **`install.bat`** und **`install.ps1`** in einen leeren Ordner legen
-   (z. B. `C:\Summarizer`)
+1. **[⬇ install.bat](https://github.com/martinprause/summarizer/releases/latest/download/install.bat)**
+   und **[⬇ install.ps1](https://github.com/martinprause/summarizer/releases/latest/download/install.ps1)**
+   in einen leeren Ordner legen (z. B. `C:\Summarizer`)
 2. Doppelklick auf **`install.bat`**
 3. Fragen beantworten: Sprache der Inhalte, lokales LLM ja/nein
 4. Browser öffnet automatisch **http://localhost:8181**
 
 ### Linux / macOS
 
-**`install.sh`** in einen leeren Ordner legen, dann:
+**[⬇ install.sh](https://github.com/martinprause/summarizer/releases/latest/download/install.sh)**
+in einen leeren Ordner legen, dann:
 
 ```bash
 chmod +x install.sh
@@ -110,8 +112,7 @@ meldet es im Studio.
 
 Speichert Webseiten, markierten Text und Bilder mit einem Klick oder per Rechtsklick-Menü.
 
-1. **`summarizer-chrome-extension.zip`** von der
-   [Releases-Seite](https://github.com/martinprause/summarizer/releases/latest)
+1. **[⬇ summarizer-chrome-extension.zip](https://github.com/martinprause/summarizer/releases/latest/download/summarizer-chrome-extension.zip)**
    herunterladen und in einen dauerhaften Ordner entpacken (z. B.
    `C:\Summarizer\chrome-extension`) - Chrome lädt die Erweiterung von dort,
    der Ordner darf nicht gelöscht werden
