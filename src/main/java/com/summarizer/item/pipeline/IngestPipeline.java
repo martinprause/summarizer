@@ -301,12 +301,14 @@ public class IngestPipeline {
         List<String> existingTags = tags.allTagNames(item.getUserId());
 
         String prompt = """
-                Analysiere den folgenden Inhalt und antworte mit GENAU drei Zeilen,
-                jede beginnt mit ihrem Schlüsselwort:
+                Analysiere den folgenden Inhalt und antworte mit GENAU drei Zeilen
+                in diesem Format (spitze Klammern durch echte Werte ersetzen):
 
-                SUMMARY|Zusammenfassung in 2-3 prägnanten deutschen Sätzen (kein Präfix, keine Einleitung)
-                CATEGORY|Kategoriepfad|Konfidenz zwischen 0 und 1
-                TAGS|2 bis 5 kleingeschriebene schlagworte, kommagetrennt
+                SUMMARY|<Zusammenfassung in 2-3 prägnanten deutschen Sätzen>
+                CATEGORY|<Kategoriepfad>|<Konfidenz zwischen 0 und 1>
+                TAGS|<schlagwort1>, <schlagwort2>, <schlagwort3>
+
+                Tags: 2 bis 5 Stück, kleingeschrieben, beschreiben WORUM ES GEHT.
 
                 Kategorien (hierarchisch, "Eltern > Kind" — Pfad EXAKT übernehmen,
                 wähle die SPEZIFISCHSTE passende):
@@ -398,7 +400,7 @@ public class IngestPipeline {
         List<String> parsed = java.util.Arrays.stream(csv.split(","))
                 .map(t -> t.strip().toLowerCase()
                         .replaceAll("^#", "")
-                        .replaceAll("[\"'.]", ""))
+                        .replaceAll("[<>\"'.]", ""))
                 .filter(t -> !t.isBlank() && t.length() <= 40 && t.split("\\s+").length <= 3)
                 .filter(t -> !BLOCKED_TAGS.contains(t))
                 .distinct()
@@ -412,7 +414,11 @@ public class IngestPipeline {
     private static final java.util.Set<String> BLOCKED_TAGS = java.util.Set.of(
             "bild", "foto", "fotos", "video", "audio", "sprachnotiz", "sprachnachricht",
             "telegram", "datei", "dateien", "pdf", "dokument", "webseite", "website",
-            "text", "screenshot", "notiz", "aufnahme", "upload", "link", "bookmark");
+            "text", "screenshot", "notiz", "aufnahme", "upload", "link", "bookmark",
+            // Anweisungswoerter, die kleine Modelle aus dem Prompt nachplappern
+            "kommagetrennt", "schlagworte", "schlagwörter", "schlagwort", "tags", "tag",
+            "keywords", "keyword", "kleingeschrieben", "beispiel", "tag1", "tag2", "tag3",
+            "schlagwort1", "schlagwort2", "schlagwort3");
 
     /** 2-3-Sätze-Zusammenfassung — der Namensgeber der App. */
     private void summarize(Item item) {
