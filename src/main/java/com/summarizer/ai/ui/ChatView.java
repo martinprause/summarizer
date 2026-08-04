@@ -100,14 +100,8 @@ public class ChatView extends VerticalLayout {
         inputRow.setFlexGrow(1, input);
         add(inputRow);
 
-        // Verlauf laden
-        for (ChatHistoryService.Message message : history.lastMessages(userId, 50)) {
-            if ("USER".equals(message.role())) {
-                messages.add(bubble(getTranslation("chat.you", message.text()), true));
-            } else {
-                messages.add(markdownBubble(message.text()));
-            }
-        }
+        // Chat startet bewusst leer — der Verlauf bleibt gespeichert,
+        // wird aber beim Öffnen nicht mehr eingeblendet (Nutzerwunsch).
     }
 
     private void ask() {

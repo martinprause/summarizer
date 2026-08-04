@@ -50,6 +50,7 @@ public class IngestPipeline {
     private final Path filesDir;
     private final com.summarizer.item.extract.YouTubeTranscriptService youtube;
     private final com.summarizer.category.CategoryArchitectService architect;
+    private final com.summarizer.category.TagVotingService tagVoting;
 
     public IngestPipeline(ItemRepository items, CategoryRepository categories,
                           FavoritesService favorites, WebPageExtractor extractor,
@@ -61,9 +62,11 @@ public class IngestPipeline {
                           com.summarizer.base.JobProgressService progress,
                           @Value("${summarizer.files.dir}") String filesDir,
                           com.summarizer.item.extract.YouTubeTranscriptService youtube,
-                          com.summarizer.category.CategoryArchitectService architect) {
+                          com.summarizer.category.CategoryArchitectService architect,
+                          com.summarizer.category.TagVotingService tagVoting) {
         this.youtube = youtube;
         this.architect = architect;
+        this.tagVoting = tagVoting;
         this.progress = progress;
         this.fileExtractor = fileExtractor;
         this.whisper = whisper;
@@ -366,13 +369,15 @@ public class IngestPipeline {
             autoTag(item);     // Fallback
         }
 
-        // Architekt: unter der Schwelle -> bestehende Ober-/Unterkategorie prüfen
-        // oder intelligent eine neue anlegen (Budget + Junk-Schutz im Service)
+        // Unter der Schwelle? Erst das billige Tag-Voting (kein LLM), dann der Architekt
         float threshold = architect.threshold();
-        boolean weak = item.getCategoryId() == null
-                || item.getCategoryConfidence() == null
-                || item.getCategoryConfidence() < threshold;
-        if (weak && architect.enabled() && !userCategories.isEmpty()) {
+        if (isWeaklyCategorized(item, threshold)) {
+            tagVoting.vote(item.getUserId(), item.getId(), favoriteIds).ifPresent(vote -> {
+                item.setCategoryId(vote.categoryId());
+                item.setCategoryConfidence(vote.confidence());
+            });
+        }
+        if (isWeaklyCategorized(item, threshold) && architect.enabled() && !userCategories.isEmpty()) {
             architect.place(item.getUserId(), item.getTitle(), item.getSummary(),
                             item.getRawText(), userCategories)
                     .ifPresent(category -> {
@@ -380,6 +385,12 @@ public class IngestPipeline {
                         item.setCategoryConfidence(threshold);
                     });
         }
+    }
+
+    private boolean isWeaklyCategorized(Item item, float threshold) {
+        return item.getCategoryId() == null
+                || item.getCategoryConfidence() == null
+                || item.getCategoryConfidence() < threshold;
     }
 
     /** Kommagetrennte Tag-Zeile filtern und setzen (gemeinsame Regeln mit autoTag). */
@@ -462,7 +473,14 @@ public class IngestPipeline {
             Long before = item.getCategoryId();
             item.setCategoryId(null);
             item.setCategoryConfidence(null);
-            classify(item);
+            // Stufe 0: Tag-Voting (kein LLM) — nur bei klarem Sieger, sonst LLM
+            var voted = tagVoting.vote(userId, item.getId(), favoriteIds);
+            if (voted.isPresent()) {
+                item.setCategoryId(voted.get().categoryId());
+                item.setCategoryConfidence(voted.get().confidence());
+            } else {
+                classify(item);
+            }
             if (item.getCategoryId() == null
                     || item.getCategoryConfidence() == null
                     || item.getCategoryConfidence() < threshold) {
