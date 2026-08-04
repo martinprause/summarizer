@@ -50,17 +50,21 @@ public class CategoriesView extends VerticalLayout {
     private final TreeGrid<Category> tree = new TreeGrid<>();
     private Category dragged;
 
+    private final com.summarizer.ai.LlmRouter llm;
+
     public CategoriesView(CategoryRepository repository, CategoryTreeService treeService,
                           CurrentUser currentUser,
                           com.summarizer.item.pipeline.IngestPipeline pipeline,
                           com.summarizer.item.ItemRepository itemRepository,
-                          com.summarizer.base.JobProgressService jobs) {
+                          com.summarizer.base.JobProgressService jobs,
+                          com.summarizer.ai.LlmRouter llm) {
         this.itemRepository = itemRepository;
         this.repository = repository;
         this.treeService = treeService;
         this.currentUser = currentUser;
         this.pipeline = pipeline;
         this.jobs = jobs;
+        this.llm = llm;
         setPadding(true);
         addClassName("fade-in");
         setSizeFull();
@@ -74,7 +78,10 @@ public class CategoriesView extends VerticalLayout {
         Button reclassify = new Button(getTranslation("categories.reclassify"), e -> confirmReclassify());
         reclassify.setTooltipText(getTranslation("categories.reclassify.tooltip"));
 
-        add(new HorizontalLayout(create, reclassify));
+        Button aiSuggest = new Button(getTranslation("categories.ai.button"), e -> openAiDialog(null));
+        aiSuggest.setTooltipText(getTranslation("categories.ai.tooltip"));
+
+        add(new HorizontalLayout(create, reclassify, aiSuggest));
         add(new com.summarizer.base.ui.JobProgressBar(jobs,
                 com.summarizer.base.JobProgressService.reclassifyKey(currentUser.id())));
 
@@ -99,9 +106,12 @@ public class CategoriesView extends VerticalLayout {
             child.setTooltipText(getTranslation("categories.addChild.tooltip"));
             Button edit = new Button(getTranslation("categories.edit"), e -> openEditor(category, null));
             edit.addThemeVariants(ButtonVariant.LUMO_SMALL);
+            Button aiChildren = new Button("✨", e -> openAiDialog(category));
+            aiChildren.addThemeVariants(ButtonVariant.LUMO_SMALL);
+            aiChildren.setTooltipText(getTranslation("categories.ai.rowTooltip"));
             Button delete = new Button(getTranslation("categories.delete"), e -> confirmDelete(category));
             delete.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR);
-            return new HorizontalLayout(child, edit, delete);
+            return new HorizontalLayout(child, edit, aiChildren, delete);
         }).setHeader(getTranslation("categories.column.actions")).setAutoWidth(true).setFlexGrow(0);
 
         tree.setRowsDraggable(true);
@@ -362,6 +372,234 @@ public class CategoriesView extends VerticalLayout {
             Notification.show(getTranslation("categories.deleted"));
         });
         dialog.open();
+    }
+
+    // ---------- KI-Assistent: Kategorien vorschlagen lassen ----------
+
+    /** Bearbeitbarer Vorschlags-Knoten des KI-Baums. */
+    private static final class Proposal {
+        private String name;
+        private String description;
+        private final List<Proposal> children = new ArrayList<>();
+        private Proposal parent;
+
+        private Proposal(String name, String description) {
+            this.name = name;
+            this.description = description;
+        }
+    }
+
+    /**
+     * Dialog: links Wunsch-Prompt ans LLM, rechts der bearbeitbare Vorschlagsbaum
+     * (umbenennen, Beschreibung ändern, löschen). "Übernehmen" legt nur Kategorien
+     * an, die noch nicht existieren. parent != null = Unterkategorien für diese Kategorie.
+     */
+    private void openAiDialog(Category parent) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(parent == null
+                ? getTranslation("categories.ai.dialogTitle")
+                : getTranslation("categories.ai.dialogTitleFor", parent.getName()));
+        dialog.setWidth("980px");
+        dialog.setHeight("620px");
+
+        List<Proposal> roots = new ArrayList<>();
+        TreeGrid<Proposal> proposalTree = new TreeGrid<>();
+
+        TextArea prompt = new TextArea(getTranslation("categories.ai.promptLabel"));
+        prompt.setWidthFull();
+        prompt.setHeight("140px");
+        prompt.setPlaceholder(parent == null
+                ? getTranslation("categories.ai.promptPlaceholder")
+                : getTranslation("categories.ai.promptPlaceholderFor", parent.getName()));
+
+        Span status = new Span();
+        status.getStyle().set("font-size", "0.85em")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        Button generate = new Button(getTranslation("categories.ai.generate"));
+        generate.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        generate.addClickListener(e -> {
+            if (prompt.getValue().isBlank()) {
+                prompt.setInvalid(true);
+                return;
+            }
+            generate.setEnabled(false);
+            status.setText(getTranslation("categories.ai.thinking"));
+            com.vaadin.flow.component.UI ui = com.vaadin.flow.component.UI.getCurrent();
+            String userWish = prompt.getValue().strip();
+            Thread.ofVirtual().start(() -> {
+                String answer;
+                try {
+                    answer = llm.generate(buildCategoryPrompt(userWish, parent));
+                } catch (Exception ex) {
+                    answer = null;
+                }
+                String result = answer;
+                ui.access(() -> {
+                    generate.setEnabled(true);
+                    List<Proposal> parsed = parseProposals(result);
+                    if (parsed.isEmpty()) {
+                        status.setText(getTranslation("categories.ai.empty"));
+                        return;
+                    }
+                    roots.clear();
+                    roots.addAll(parsed);
+                    proposalTree.setItems(roots, p -> p.children);
+                    proposalTree.expandRecursively(roots, 3);
+                    status.setText(getTranslation("categories.ai.editHint"));
+                });
+            });
+        });
+
+        VerticalLayout left = new VerticalLayout(prompt, generate, status);
+        left.setPadding(false);
+        left.setWidth("340px");
+        left.setFlexShrink(0);
+
+        // Rechter Baum: Name und Beschreibung direkt editierbar, Zeile löschbar
+        proposalTree.addComponentHierarchyColumn(node -> {
+            TextField name = new TextField();
+            name.setValue(node.name);
+            name.setWidthFull();
+            name.addValueChangeListener(e -> node.name = e.getValue());
+            return name;
+        }).setHeader(getTranslation("categories.ai.column.name")).setFlexGrow(2);
+        proposalTree.addComponentColumn(node -> {
+            TextField description = new TextField();
+            description.setValue(node.description == null ? "" : node.description);
+            description.setWidthFull();
+            description.addValueChangeListener(e -> node.description = e.getValue());
+            return description;
+        }).setHeader(getTranslation("categories.ai.column.description")).setFlexGrow(3);
+        proposalTree.addComponentColumn(node -> {
+            Button remove = new Button("✕", e -> {
+                if (node.parent == null) {
+                    roots.remove(node);
+                } else {
+                    node.parent.children.remove(node);
+                }
+                proposalTree.setItems(roots, p -> p.children);
+                proposalTree.expandRecursively(roots, 3);
+            });
+            remove.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR,
+                    ButtonVariant.LUMO_TERTIARY);
+            remove.setTooltipText(getTranslation("categories.ai.remove"));
+            return remove;
+        }).setWidth("70px").setFlexGrow(0);
+        proposalTree.setSizeFull();
+
+        HorizontalLayout body = new HorizontalLayout(left, proposalTree);
+        body.setSizeFull();
+        body.setFlexGrow(1, proposalTree);
+        dialog.add(body);
+
+        Button apply = new Button(getTranslation("categories.ai.apply"), e -> {
+            if (roots.isEmpty()) {
+                Notification.show(getTranslation("categories.ai.nothing"));
+                return;
+            }
+            int[] counts = new int[2];   // [0] angelegt, [1] übersprungen
+            java.util.Map<String, Category> existing = new java.util.HashMap<>();
+            for (Category c : repository.findByUserIdOrderBySortOrderAscNameAsc(currentUser.id())) {
+                existing.put(c.getName().toLowerCase(), c);
+            }
+            Long parentId = parent == null ? null : parent.getId();
+            for (Proposal root : roots) {
+                applyProposal(root, parentId, existing, counts);
+            }
+            dialog.close();
+            refresh();
+            Notification.show(getTranslation("categories.ai.applied",
+                    counts[0], counts[1]), 6000, Notification.Position.MIDDLE);
+        });
+        apply.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        Button cancel = new Button(getTranslation("categories.cancel"), e -> dialog.close());
+        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        dialog.getFooter().add(new HorizontalLayout(cancel, apply));
+        dialog.open();
+    }
+
+    private String buildCategoryPrompt(String wish, Category parent) {
+        String context = parent == null ? "" :
+                "Alle vorgeschlagenen Kategorien werden Unterkategorien von \""
+                        + parent.getName() + "\""
+                        + (parent.getDescription() == null || parent.getDescription().isBlank()
+                                ? "" : " (" + parent.getDescription() + ")")
+                        + ". Schlage NUR diese Unterkategorien vor, nicht die Oberkategorie selbst.\n";
+        return """
+                Erstelle eine Kategorien-Hierarchie für ein persönliches Wissensarchiv.
+                Wunsch des Nutzers: %s
+                %s
+                Regeln:
+                - Höchstens 3 Ebenen und insgesamt höchstens 15 Kategorien.
+                - Jede Beschreibung ist EIN Satz: wofür die Kategorie ist, plus typische Schlagworte.
+                - Format pro Zeile: so viele "-" wie die Tiefe (oberste Ebene ohne "-"),
+                  dann Name|Beschreibung. Keine weiteren Zeichen, keine Erklärung.
+
+                Beispiel:
+                Fotografie|Kameras, Objektive, Bildbearbeitung und Fototechnik
+                - Kameras|Kameramodelle, Hersteller, Kaufberatung
+                - - Objektive|Brennweiten, Lichtstärke, Marken
+                """.formatted(wish, context);
+    }
+
+    /** Zeilenformat "-- Name|Beschreibung" in einen Baum überführen. */
+    private List<Proposal> parseProposals(String answer) {
+        List<Proposal> roots = new ArrayList<>();
+        if (answer == null || answer.isBlank()) {
+            return roots;
+        }
+        java.util.Deque<Proposal> stack = new java.util.ArrayDeque<>();
+        for (String rawLine : answer.strip().lines().toList()) {
+            String line = rawLine.strip();
+            if (line.isEmpty() || !line.contains("|")) {
+                continue;
+            }
+            // Tiefe = Anzahl fuehrender "-" (Leerzeichen dazwischen erlaubt)
+            long dashes = line.replaceFirst("^([-\\s]*).*$", "$1")
+                    .chars().filter(c -> c == '-').count();
+            String content = line.replaceFirst("^[-\\s]+", "");
+            String[] parts = content.split("\\|", 2);
+            String name = parts[0].strip();
+            if (name.isBlank() || name.length() > 100) {
+                continue;
+            }
+            Proposal node = new Proposal(name, parts.length > 1 ? parts[1].strip() : "");
+            int level = (int) dashes;
+            while (stack.size() > level) {
+                stack.pop();
+            }
+            if (stack.isEmpty()) {
+                roots.add(node);
+            } else {
+                node.parent = stack.peek();
+                stack.peek().children.add(node);
+            }
+            stack.push(node);
+        }
+        return roots;
+    }
+
+    /** Rekursiv anlegen; existierende Namen wiederverwenden statt duplizieren. */
+    private void applyProposal(Proposal node, Long parentId,
+                               java.util.Map<String, Category> existing, int[] counts) {
+        if (node.name == null || node.name.isBlank()) {
+            return;
+        }
+        Category target = existing.get(node.name.strip().toLowerCase());
+        if (target == null) {
+            target = new Category(currentUser.id(), node.name.strip(),
+                    node.description == null ? "" : node.description.strip());
+            target.setParentId(parentId);
+            target = repository.save(target);
+            existing.put(target.getName().toLowerCase(), target);
+            counts[0]++;
+        } else {
+            counts[1]++;   // existiert schon — nicht doppelt anlegen
+        }
+        for (Proposal child : node.children) {
+            applyProposal(child, target.getId(), existing, counts);
+        }
     }
 
     private void refresh() {
