@@ -24,8 +24,10 @@ public class SystemView extends VerticalLayout {
                       com.summarizer.user.UserRepository users,
                       org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                       @Value("${summarizer.ollama.chat-model}") String chatModel,
-                      @Value("${summarizer.ollama.embedding-model}") String embeddingModel) {
+                      @Value("${summarizer.ollama.embedding-model}") String embeddingModel,
+                      @Value("${summarizer.version:dev}") String appVersion) {
         add(new H2(getTranslation("system.status.title")));
+        add(statusLine(getTranslation("system.status.version", appVersion), true));
         try {
             String pgVersion = jdbc.queryForObject("SELECT version()", String.class);
             String vectorVersion = jdbc.queryForObject(

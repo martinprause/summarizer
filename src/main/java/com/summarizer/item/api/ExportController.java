@@ -49,6 +49,42 @@ public class ExportController {
                 .body(rows);
     }
 
+    /** Kategorien-Baum als JSON — zum Übertragen auf andere Installationen. */
+    @GetMapping(value = "/export/categories.json", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<Map<String, Object>>> exportCategories() {
+        List<Map<String, Object>> flat = jdbc.queryForList("""
+                SELECT id, parent_id, name, description, color FROM categories
+                WHERE user_id = ? ORDER BY sort_order, name
+                """, currentUser.id());
+        // Baum aufbauen: children-Listen statt parent_id-Referenzen
+        Map<Object, Map<String, Object>> byId = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> row : flat) {
+            Map<String, Object> node = new java.util.LinkedHashMap<>();
+            node.put("name", row.get("name"));
+            node.put("description", row.get("description"));
+            node.put("color", row.get("color"));
+            node.put("children", new java.util.ArrayList<Map<String, Object>>());
+            byId.put(row.get("id"), node);
+        }
+        List<Map<String, Object>> roots = new java.util.ArrayList<>();
+        for (Map<String, Object> row : flat) {
+            Map<String, Object> node = byId.get(row.get("id"));
+            Object parentId = row.get("parent_id");
+            if (parentId != null && byId.containsKey(parentId)) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> children =
+                        (List<Map<String, Object>>) byId.get(parentId).get("children");
+                children.add(node);
+            } else {
+                roots.add(node);
+            }
+        }
+        return ResponseEntity.ok()
+                .header("Content-Disposition",
+                        "attachment; filename=\"summarizer-kategorien-" + LocalDate.now() + ".json\"")
+                .body(roots);
+    }
+
     /**
      * Komplettes Backup als ZIP: alle Tabellen-Inhalte des Users als JSON
      * plus die abgelegten Original-Dateien und Webseiten-Snapshots.

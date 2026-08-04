@@ -76,6 +76,7 @@ public class DashboardView extends HorizontalLayout {
             new com.vaadin.flow.component.combobox.MultiSelectComboBox<>();
     private final DatePicker fromDate = new DatePicker();
     private final DatePicker toDate = new DatePicker();
+    private final Checkbox deadBox = new Checkbox();
 
     private final VerticalLayout sidebar = new VerticalLayout();
     private final TreeGrid<Category> favTree = new TreeGrid<>();
@@ -104,6 +105,7 @@ public class DashboardView extends HorizontalLayout {
     private final com.summarizer.settings.AppSettingsService settings;
     private final com.summarizer.task.TaskService taskService;
     private final com.summarizer.task.TaskRepository taskRepository;
+    private final com.summarizer.item.LinkCheckService linkCheck;
 
     public DashboardView(ItemQueryService queries, ItemRepository itemRepository,
                          CategoryRepository categories, CategoryTreeService categoryTree,
@@ -112,11 +114,13 @@ public class DashboardView extends HorizontalLayout {
                          com.summarizer.item.TagService tags,
                          com.summarizer.settings.AppSettingsService settings,
                          com.summarizer.task.TaskService taskService,
-                         com.summarizer.task.TaskRepository taskRepository) {
+                         com.summarizer.task.TaskRepository taskRepository,
+                         com.summarizer.item.LinkCheckService linkCheck) {
         this.tags = tags;
         this.settings = settings;
         this.taskService = taskService;
         this.taskRepository = taskRepository;
+        this.linkCheck = linkCheck;
         this.queries = queries;
         this.itemRepository = itemRepository;
         this.categoryTree = categoryTree;
@@ -138,7 +142,6 @@ public class DashboardView extends HorizontalLayout {
         setSizeFull();
 
         buildSidebar();
-        add(sidebar);
 
         VerticalLayout content = new VerticalLayout();
         content.setPadding(false);
@@ -165,15 +168,21 @@ public class DashboardView extends HorizontalLayout {
                 + "  entries.forEach((entry) => { if (entry.isIntersecting) b.click(); });"
                 + "}).observe(b);");
 
-        add(content);
-        setFlexGrow(1, content);
+        // Splitter zwischen Kategorien-Sidebar und Kacheln — Breite frei ziehbar
+        com.vaadin.flow.component.splitlayout.SplitLayout split =
+                new com.vaadin.flow.component.splitlayout.SplitLayout(sidebar, content);
+        split.setSizeFull();
+        split.setSplitterPosition(20);
+        add(split);
+        setFlexGrow(1, split);
         reload();
     }
 
     // ---------- Sidebar: Alle anzeigen / Favoriten / Kategorien ----------
 
     private void buildSidebar() {
-        sidebar.setWidth("270px");
+        sidebar.setWidthFull();
+        sidebar.getStyle().set("min-width", "170px");
         sidebar.setPadding(false);
         sidebar.setSpacing(false);
         sidebar.addClassName("s-sidebar");
@@ -185,6 +194,11 @@ public class DashboardView extends HorizontalLayout {
         mainTree.addThemeVariants(com.vaadin.flow.component.grid.GridVariant.LUMO_COMPACT,
                 com.vaadin.flow.component.grid.GridVariant.LUMO_NO_BORDER,
                 com.vaadin.flow.component.grid.GridVariant.LUMO_NO_ROW_BORDERS);
+
+        categoryCounts = new java.util.HashMap<>();
+        for (Object[] row : itemRepository.countPerCategory(user.getId())) {
+            categoryCounts.put((Long) row[0], (Long) row[1]);
+        }
 
         Button all = new Button(getTranslation("dashboard.sidebar.showAll"), VaadinIcon.LIST.create(), e -> {
             clearTreeSelection();
@@ -223,11 +237,18 @@ public class DashboardView extends HorizontalLayout {
                 .toList();
     }
 
+    private java.util.Map<Long, Long> categoryCounts = java.util.Map.of();
+
     private Span categoryLabel(Category category) {
         Span dot = new Span(category.isFavorites() ? "★ " : "● ");
         dot.getStyle().set("color", category.getColor() == null || category.getColor().isBlank()
                 ? "#78909c" : category.getColor());
-        return new Span(dot, new Span(category.getName()));
+        // Anzahl direkt zugeordneter Inhalte in Klammern
+        long count = categoryCounts.getOrDefault(category.getId(), 0L);
+        Span counter = new Span(count > 0 ? " (" + count + ")" : "");
+        counter.getStyle().set("color", "var(--vaadin-text-color-secondary, #999)")
+                .set("font-size", "0.85em");
+        return new Span(dot, new Span(category.getName()), counter);
     }
 
     /**
@@ -313,6 +334,13 @@ public class DashboardView extends HorizontalLayout {
         toDate.setPlaceholder(getTranslation("dashboard.filter.to"));
         toDate.setWidth("140px");
 
+        deadBox.setLabel(getTranslation("dashboard.filter.deadLinks"));
+        deadBox.addValueChangeListener(e -> {
+            if (e.isFromClient()) {
+                reload();
+            }
+        });
+
         Button search = new Button(getTranslation("dashboard.filter.searchButton"), e -> reload());
         search.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         search.addClickShortcut(com.vaadin.flow.component.Key.ENTER);
@@ -323,12 +351,13 @@ public class DashboardView extends HorizontalLayout {
             tagBox.clear();
             fromDate.clear();
             toDate.clear();
+            deadBox.setValue(false);
             clearTreeSelection();
             reload();
         });
 
         FlexLayout bar = new FlexLayout(searchField, semanticBox, categoryBox, typeBox,
-                tagBox, fromDate, toDate, search, reset);
+                tagBox, fromDate, toDate, deadBox, search, reset);
         bar.setFlexWrap(FlexLayout.FlexWrap.WRAP);
         bar.addClassName("s-toolbar");
         bar.getStyle().set("gap", "0.5em").set("align-items", "end").set("width", "100%");
@@ -359,9 +388,16 @@ public class DashboardView extends HorizontalLayout {
                 VaadinIcon.PASTE.create(), e -> openPasteDialog());
         pasteButton.setTooltipText(getTranslation("dashboard.paste.tooltip"));
 
+        Button checkLinks = new Button(getTranslation("dashboard.linkcheck.button"),
+                VaadinIcon.LINK.create(), e -> {
+                    linkCheck.checkAll(user.getId());
+                    Notification.show(getTranslation("dashboard.linkcheck.started"));
+                });
+        checkLinks.setTooltipText(getTranslation("dashboard.linkcheck.tooltip"));
+
         Div spacer = new Div();
         HorizontalLayout toolbar = new HorizontalLayout(label, sortBar, spacer, tiles, list,
-                importButton, uploadButton, pasteButton);
+                importButton, uploadButton, pasteButton, checkLinks);
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.setFlexGrow(1, spacer);
         toolbar.setWidthFull();
@@ -674,7 +710,8 @@ public class DashboardView extends HorizontalLayout {
                 fromDate.getValue(),
                 toDate.getValue(),
                 sortKeys,
-                List.copyOf(tagBox.getValue()));
+                List.copyOf(tagBox.getValue()),
+                Boolean.TRUE.equals(deadBox.getValue()));
     }
 
     private void reload() {
@@ -713,6 +750,7 @@ public class DashboardView extends HorizontalLayout {
     private boolean isUnfiltered() {
         return selectedTreeCategory == null && !favoritesSelected
                 && categoryBox.isEmpty() && typeBox.isEmpty() && tagBox.getValue().isEmpty()
+                && !Boolean.TRUE.equals(deadBox.getValue())
                 && (searchField.getValue() == null || searchField.getValue().isBlank());
     }
 
@@ -808,6 +846,12 @@ public class DashboardView extends HorizontalLayout {
             Span processing = new Span("⏳");
             processing.getStyle().set("font-size", "0.8em");
             meta.add(processing);
+        }
+        if (Boolean.FALSE.equals(card.linkOk())) {
+            Span deadLink = new Span(getTranslation("dashboard.card.deadLink"));
+            deadLink.getStyle().set("color", "#c62828").set("font-size", "0.8em")
+                    .set("font-weight", "700");
+            meta.add(deadLink);
         }
         if (card.categoryName() != null) {
             meta.add(categoryBadge(card.categoryName(), card.categoryColor()));

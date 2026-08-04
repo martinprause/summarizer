@@ -29,10 +29,10 @@ public class ItemQueryService {
 
     public record Filter(String text, boolean semantic, List<Long> categoryIds, boolean unsortedOnly,
                          boolean favoritesOnly, Item.Type type, LocalDate from, LocalDate to,
-                         List<String> sortKeys, List<String> tags) {
+                         List<String> sortKeys, List<String> tags, boolean deadLinksOnly) {
 
         public static Filter empty() {
-            return new Filter(null, false, null, false, false, null, null, null, null, null);
+            return new Filter(null, false, null, false, false, null, null, null, null, null, false);
         }
 
         boolean hasTags() {
@@ -47,7 +47,7 @@ public class ItemQueryService {
     public record Card(long id, String title, String type, String categoryName, String categoryColor,
                        Float confidence, Instant createdAt, String snippet, String sourceUrl,
                        Double distance, boolean favorite, String summary, String thumbnailUrl,
-                       String status, String tags) {
+                       String status, String tags, Boolean linkOk) {
     }
 
     public List<Card> find(Long userId, Filter filter, int offset, int limit) {
@@ -67,7 +67,7 @@ public class ItemQueryService {
 
         sql.append("""
                 SELECT i.id, i.title, i.type, i.created_at, i.category_confidence, i.source_url,
-                       i.favorite, i.summary, i.thumbnail_url, i.status,
+                       i.favorite, i.summary, i.thumbnail_url, i.status, i.link_ok,
                        left(coalesce(i.raw_text, ''), 240) AS snippet,
                        c.name AS category_name, c.color AS category_color,
                        (SELECT string_agg(t.name, ',') FROM item_tags it
@@ -113,6 +113,9 @@ public class ItemQueryService {
             sql.append("AND i.type = ?\n");
             params.add(filter.type().name());
         }
+        if (filter.deadLinksOnly()) {
+            sql.append("AND i.link_ok = FALSE\n");
+        }
         if (filter.from() != null) {
             sql.append("AND i.created_at >= ?\n");
             params.add(Timestamp.from(filter.from().atStartOfDay(ZoneId.systemDefault()).toInstant()));
@@ -148,7 +151,8 @@ public class ItemQueryService {
                         rs.getString("summary"),
                         rs.getString("thumbnail_url"),
                         rs.getString("status"),
-                        rs.getString("tags")),
+                        rs.getString("tags"),
+                        rs.getObject("link_ok", Boolean.class)),
                 params.toArray());
     }
 

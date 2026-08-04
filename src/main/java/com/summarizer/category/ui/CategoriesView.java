@@ -28,6 +28,7 @@ import jakarta.annotation.security.PermitAll;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -81,7 +82,22 @@ public class CategoriesView extends VerticalLayout {
         Button aiSuggest = new Button(getTranslation("categories.ai.button"), e -> openAiDialog(null));
         aiSuggest.setTooltipText(getTranslation("categories.ai.tooltip"));
 
-        add(new HorizontalLayout(create, reclassify, aiSuggest));
+        com.vaadin.flow.component.html.Anchor export = new com.vaadin.flow.component.html.Anchor(
+                "export/categories.json", "");
+        export.getElement().setAttribute("download", true);
+        Button exportButton = new Button(getTranslation("categories.export"));
+        exportButton.setTooltipText(getTranslation("categories.export.tooltip"));
+        export.add(exportButton);
+
+        Button importButton = new Button(getTranslation("categories.import"),
+                e -> openImportDialog());
+        importButton.setTooltipText(getTranslation("categories.import.tooltip"));
+
+        HorizontalLayout actions = new HorizontalLayout(create, reclassify, aiSuggest,
+                export, importButton);
+        actions.setAlignItems(Alignment.CENTER);
+        actions.getStyle().set("flex-wrap", "wrap");
+        add(actions);
         add(new com.summarizer.base.ui.JobProgressBar(jobs,
                 com.summarizer.base.JobProgressService.reclassifyKey(currentUser.id())));
 
@@ -393,6 +409,77 @@ public class CategoriesView extends VerticalLayout {
             Notification.show(getTranslation("categories.deleted"));
         });
         dialog.open();
+    }
+
+    // ---------- Import: Kategorien-Baum aus JSON-Datei ----------
+
+    /** JSON aus dem Export einlesen; nur nicht vorhandene Kategorien anlegen. */
+    private void openImportDialog() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("categories.import.dialogTitle"));
+        dialog.add(new Paragraph(getTranslation("categories.import.dialogText")));
+
+        com.vaadin.flow.component.upload.receivers.MemoryBuffer buffer =
+                new com.vaadin.flow.component.upload.receivers.MemoryBuffer();
+        com.vaadin.flow.component.upload.Upload upload =
+                new com.vaadin.flow.component.upload.Upload(buffer);
+        upload.setAcceptedFileTypes(".json", "application/json");
+        upload.setMaxFiles(1);
+        upload.addSucceededListener(e -> {
+            try {
+                var mapper = new tools.jackson.databind.ObjectMapper();
+                List<Map<String, Object>> roots = mapper.readValue(buffer.getInputStream(),
+                        mapper.getTypeFactory().constructCollectionType(
+                                List.class, Map.class));
+                int[] counts = new int[2];
+                java.util.Map<String, Category> existing = new java.util.HashMap<>();
+                for (Category c : repository.findByUserIdOrderBySortOrderAscNameAsc(currentUser.id())) {
+                    existing.put(c.getName().toLowerCase(), c);
+                }
+                for (Map<String, Object> root : roots) {
+                    importNode(root, null, existing, counts);
+                }
+                dialog.close();
+                refresh();
+                Notification.show(getTranslation("categories.ai.applied",
+                        counts[0], counts[1]), 6000, Notification.Position.MIDDLE);
+            } catch (Exception ex) {
+                Notification.show(getTranslation("categories.import.failed", ex.getMessage()),
+                        6000, Notification.Position.MIDDLE);
+            }
+        });
+        dialog.add(upload);
+        dialog.open();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void importNode(Map<String, Object> node, Long parentId,
+                            java.util.Map<String, Category> existing, int[] counts) {
+        Object nameValue = node.get("name");
+        if (!(nameValue instanceof String name) || name.isBlank() || name.length() > 100) {
+            return;
+        }
+        Category target = existing.get(name.strip().toLowerCase());
+        if (target == null) {
+            target = new Category(currentUser.id(), name.strip(),
+                    node.get("description") instanceof String d ? d : "");
+            if (node.get("color") instanceof String color && !color.isBlank()) {
+                target.setColor(color);
+            }
+            target.setParentId(parentId);
+            target = repository.save(target);
+            existing.put(target.getName().toLowerCase(), target);
+            counts[0]++;
+        } else {
+            counts[1]++;
+        }
+        if (node.get("children") instanceof List<?> children) {
+            for (Object child : children) {
+                if (child instanceof Map<?, ?> childMap) {
+                    importNode((Map<String, Object>) childMap, target.getId(), existing, counts);
+                }
+            }
+        }
     }
 
     // ---------- KI-Assistent: Kategorien vorschlagen lassen ----------

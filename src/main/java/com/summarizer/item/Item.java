@@ -71,6 +71,10 @@ public class Item {
     @Column(name = "snapshot_path")
     private String snapshotPath;
 
+    /** NULL = ungeprüft, TRUE = erreichbar, FALSE = toter Link. */
+    @Column(name = "link_ok")
+    private Boolean linkOk;
+
     protected Item() {
     }
 
@@ -193,5 +197,13 @@ public class Item {
 
     public void setSnapshotPath(String snapshotPath) {
         this.snapshotPath = snapshotPath;
+    }
+
+    public Boolean getLinkOk() {
+        return linkOk;
+    }
+
+    public void setLinkOk(Boolean linkOk) {
+        this.linkOk = linkOk;
     }
 }

@@ -50,6 +50,7 @@ public class InboxView extends VerticalLayout {
         this.categories = categoryRepository.findByUserIdOrderBySortOrderAscNameAsc(currentUser.id());
         setPadding(true);
         addClassName("fade-in");
+        setSizeFull();   // volle Fensterhöhe nutzen, Grid füllt den Rest
 
         add(new H2(getTranslation("inbox.title")));
         add(new Paragraph(getTranslation("inbox.description")));
@@ -74,8 +75,9 @@ public class InboxView extends VerticalLayout {
                 UI.getCurrent().navigate(ItemDetailView.class, e.getItem().getId());
             }
         });
-        grid.setWidthFull();
+        grid.setSizeFull();
         add(grid);
+        expand(grid);
         refresh();
     }
 
