@@ -72,22 +72,51 @@ public class OllamaClient {
         }
     }
 
+    /**
+     * Max. 2 gleichzeitige Generierungen: mehr parallele Anfragen bringen auf
+     * CPU nichts und haben Ollama unter Last zum Absturz gebracht (alle
+     * Verbindungen gleichzeitig gekappt). Die Pipeline-Worker parallelisieren
+     * weiterhin Webseiten-Abrufe — nur der LLM-Teil wird hier serialisiert.
+     */
+    private static final java.util.concurrent.Semaphore GENERATE_SLOTS =
+            new java.util.concurrent.Semaphore(1, true);
+
     /** Einzelner Prompt, komplette Antwort (kein Streaming). Null bei Fehler. */
     public String generate(String prompt) {
         try {
-            Map<?, ?> response = restClient.post()
-                    .uri("/api/generate")
-                    .body(Map.of(
-                            "model", chatModel(),
-                            "prompt", prompt,
-                            "stream", false,
-                            "options", Map.of("temperature", 0)))
-                    .retrieve()
-                    .body(Map.class);
-            return response == null ? null : (String) response.get("response");
-        } catch (Exception e) {
-            log.warn("Ollama generate fehlgeschlagen: {}", e.getMessage());
+            GENERATE_SLOTS.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             return null;
+        }
+        try {
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    Map<?, ?> response = restClient.post()
+                            .uri("/api/generate")
+                            .body(Map.of(
+                                    "model", chatModel(),
+                                    "prompt", prompt,
+                                    "stream", false,
+                                    "options", Map.of("temperature", 0)))
+                            .retrieve()
+                            .body(Map.class);
+                    return response == null ? null : (String) response.get("response");
+                } catch (Exception e) {
+                    log.warn("Ollama generate fehlgeschlagen (Versuch {}): {}", attempt, e.getMessage());
+                    if (attempt == 1) {
+                        try {
+                            Thread.sleep(3000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            return null;
+                        }
+                    }
+                }
+            }
+            return null;
+        } finally {
+            GENERATE_SLOTS.release();
         }
     }
 
