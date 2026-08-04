@@ -72,6 +72,7 @@ public class SystemView extends VerticalLayout {
         addLanguageSection(settings);
         addImportSection(settings, currentUser);
         addArchitectSection(settings, currentUser);
+        addDangerSection(jdbc, currentUser);
         addAccessSection(settings, currentUser, users, passwordEncoder);
     }
 
@@ -291,6 +292,90 @@ public class SystemView extends VerticalLayout {
                         ? getTranslation("system.telegram.tokenNoBot")
                         : getTranslation("system.telegram.noBot"));
         add(statusLine(status, telegram.botUsername().isPresent()));
+    }
+
+    /** Gefahrenzone: alle Inhalte des Users löschen — doppelt bestätigt. */
+    private void addDangerSection(JdbcTemplate jdbc, com.summarizer.base.CurrentUser currentUser) {
+        if (!"ADMIN".equals(currentUser.get().getRole())) {
+            return;
+        }
+        com.vaadin.flow.component.html.H2 heading =
+                new com.vaadin.flow.component.html.H2(getTranslation("system.danger.title"));
+        heading.getStyle().set("color", "#c62828");
+        add(heading);
+        com.vaadin.flow.component.html.Paragraph hint =
+                new com.vaadin.flow.component.html.Paragraph(getTranslation("system.danger.hint"));
+        hint.getStyle().set("color", "var(--lumo-secondary-text-color)").set("font-size", "0.9em");
+        add(hint);
+
+        com.vaadin.flow.component.button.Button wipe = new com.vaadin.flow.component.button.Button(
+                getTranslation("system.danger.button"), e -> openWipeDialog(jdbc, currentUser.id()));
+        wipe.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_ERROR);
+        add(wipe);
+    }
+
+    private void openWipeDialog(JdbcTemplate jdbc, Long userId) {
+        com.vaadin.flow.component.dialog.Dialog dialog = new com.vaadin.flow.component.dialog.Dialog();
+        dialog.setHeaderTitle(getTranslation("system.danger.confirmTitle"));
+        dialog.setWidth("480px");
+        Long count = jdbc.queryForObject(
+                "SELECT count(*) FROM items WHERE user_id = ?", Long.class, userId);
+        com.vaadin.flow.component.html.Paragraph warning =
+                new com.vaadin.flow.component.html.Paragraph(
+                        getTranslation("system.danger.confirmText", count == null ? 0 : count));
+        warning.getStyle().set("color", "#c62828").set("font-weight", "600");
+
+        com.vaadin.flow.component.textfield.TextField confirmField =
+                new com.vaadin.flow.component.textfield.TextField(
+                        getTranslation("system.danger.typeToConfirm"));
+        confirmField.setWidthFull();
+        confirmField.setPlaceholder("LÖSCHEN");
+        confirmField.setValueChangeMode(com.vaadin.flow.data.value.ValueChangeMode.EAGER);
+
+        com.vaadin.flow.component.button.Button doDelete = new com.vaadin.flow.component.button.Button(
+                getTranslation("system.danger.execute"));
+        doDelete.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_ERROR,
+                com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
+        doDelete.setEnabled(false);
+        confirmField.addValueChangeListener(e ->
+                doDelete.setEnabled("LÖSCHEN".equals(e.getValue()) || "DELETE".equals(e.getValue())));
+        doDelete.addClickListener(e -> {
+            wipeContent(jdbc, userId);
+            dialog.close();
+            com.vaadin.flow.component.notification.Notification.show(
+                    getTranslation("system.danger.done"), 6000,
+                    com.vaadin.flow.component.notification.Notification.Position.MIDDLE);
+        });
+        com.vaadin.flow.component.button.Button cancel = new com.vaadin.flow.component.button.Button(
+                getTranslation("system.danger.cancel"), e -> dialog.close());
+        cancel.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_TERTIARY);
+
+        dialog.add(warning, confirmField);
+        dialog.getFooter().add(cancel, doDelete);
+        dialog.open();
+    }
+
+    /** Inhalte + abgeleitete Daten löschen; Kategorien, Aufgaben und Einstellungen bleiben. */
+    private void wipeContent(JdbcTemplate jdbc, Long userId) {
+        java.util.List<String> files = new java.util.ArrayList<>();
+        files.addAll(jdbc.queryForList(
+                "SELECT file_path FROM items WHERE user_id = ? AND file_path IS NOT NULL",
+                String.class, userId));
+        files.addAll(jdbc.queryForList(
+                "SELECT snapshot_path FROM items WHERE user_id = ? AND snapshot_path IS NOT NULL",
+                String.class, userId));
+        // Reihenfolge egal — Kaskaden räumen embeddings, item_tags, item_entities, item_tasks
+        jdbc.update("DELETE FROM entities WHERE user_id = ?", userId);
+        jdbc.update("DELETE FROM tags WHERE user_id = ?", userId);
+        jdbc.update("DELETE FROM chat_messages WHERE user_id = ?", userId);
+        jdbc.update("DELETE FROM items WHERE user_id = ?", userId);
+        for (String path : files) {
+            try {
+                java.nio.file.Files.deleteIfExists(java.nio.file.Path.of(path));
+            } catch (Exception ignored) {
+                // Datei fehlt/gesperrt — Datenbank ist die Wahrheit
+            }
+        }
     }
 
     private Span statusLine(String text, boolean ok) {
