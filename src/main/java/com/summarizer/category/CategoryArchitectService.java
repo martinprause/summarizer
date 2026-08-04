@@ -111,7 +111,7 @@ public class CategoryArchitectService {
                   parent_path (passendste bestehende Oberkategorie, sonst "ROOT").
 
                 Regeln für "new":
-                - name: 1-3 Wörter, ein THEMENGEBIET ("Solarenergie", "Computer Vision") —
+                - name: 1-4 Wörter, ein THEMENGEBIET ("Solarenergie", "Computer Vision") —
                   NIEMALS Titel, Fachbegriff oder Produktname des Dokuments selbst.
                 - description: kurze Einsortier-Anweisung plus 3-6 allgemeine Schlagworte
                   zum Themengebiet, kommagetrennt. KEIN Satz über das Dokument.
@@ -168,7 +168,7 @@ public class CategoryArchitectService {
         String description = parts.length > 1 ? parts[1].strip() : "";
         String parentPath = parts.length > 2 ? parts[2].strip() : "ROOT";
 
-        if (name.length() > 60 || name.split("\\s+").length > 3
+        if (name.length() > 60 || name.split("\\s+").length > 4
                 || JUNK_NAMES.contains(name.toLowerCase())) {
             log.info("Architekt: Kategorie-Name '{}' abgelehnt (Junk/zu lang)", name);
             return Optional.empty();
