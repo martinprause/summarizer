@@ -458,6 +458,13 @@ start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File
         Write-Log "Modelle: Chat $chat, Embeddings $embed (änderbar im Studio unter 'KI-Modelle')"
         $ollamaUrl = if ($llmBox.SelectedIndex -eq 0) { "http://ollama:11434" }
                      else { "http://host.docker.internal:11434" }
+        # Freien Host-Port für den Ollama-Container finden - ein bereits auf dem
+        # Host installiertes Ollama belegt sonst 11434 und der Container startet nicht.
+        $ollamaPort = 11434
+        while (-not (Test-PortFree $ollamaPort)) { $ollamaPort++ }
+        if ($ollamaPort -ne 11434) {
+            Write-Log "Port 11434 belegt (lokales Ollama?) - Container nutzt Port $ollamaPort."
+        }
         $dbPassword = [guid]::NewGuid().ToString('N').Substring(0, 16)
         @"
 POSTGRES_DB=summarizer
@@ -469,6 +476,7 @@ CHAT_MODEL=$chat
 EMBEDDING_MODEL=$embed
 EMBEDDING_DIM=$dim
 APP_PORT=$port
+OLLAMA_PORT=$ollamaPort
 WHISPER_MODEL=small
 "@ | ForEach-Object { if (-not $envExists) { $_ | Out-File -Encoding utf8 ".env" } }
         if ($envExists) { Write-Log ".env existiert bereits - Konfiguration unverändert." }

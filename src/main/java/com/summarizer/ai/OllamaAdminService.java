@@ -36,6 +36,33 @@ public class OllamaAdminService {
         }
     }
 
+    /**
+     * Fehlende Pflicht-Modelle (Chat + Embedding) automatisch nachladen.
+     * Deckt beide Setups ab: Container-Ollama, dessen init-Lauf scheiterte,
+     * und ein bereits vorhandenes Host-Ollama ohne unsere Modelle.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 300000, initialDelay = 15000)
+    public void ensureRequiredModels() {
+        try {
+            if (!ollama.isAvailable()) {
+                return;
+            }
+            java.util.List<String> installed = ollama.listModels().stream()
+                    .map(OllamaClient.ModelInfo::name).toList();
+            for (String required : java.util.List.of(ollama.chatModel(), ollama.embeddingModel())) {
+                boolean present = installed.stream().anyMatch(name -> name.equals(required)
+                        || name.equals(required + ":latest") || required.equals(name + ":latest"));
+                boolean pulling = "lädt …".equals(pullStatus.get(required));
+                if (!present && !pulling) {
+                    log.info("Erforderliches Modell {} fehlt — Download startet automatisch", required);
+                    pullAsync(required);
+                }
+            }
+        } catch (Exception ignored) {
+            // Ollama gerade nicht ansprechbar — nächster Lauf prüft erneut
+        }
+    }
+
     public Map<String, String> status() {
         return Map.copyOf(pullStatus);
     }

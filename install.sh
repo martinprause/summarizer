@@ -170,6 +170,15 @@ if [[ ! -f .env ]]; then
     done
     [[ "$APP_PORT" != "8181" ]] && echo "Port 8181 belegt -> verwende ${APP_PORT}"
 
+    # Freien Host-Port für den Ollama-Container finden - ein bereits auf dem
+    # Host installiertes Ollama belegt sonst 11434 und der Container startet nicht.
+    OLLAMA_PORT=11434
+    while (command -v ss >/dev/null && ss -ltn | grep -q ":${OLLAMA_PORT} ") ||
+          (command -v lsof >/dev/null && lsof -iTCP:${OLLAMA_PORT} -sTCP:LISTEN >/dev/null 2>&1); do
+        OLLAMA_PORT=$((OLLAMA_PORT + 1))
+    done
+    [[ "$OLLAMA_PORT" != "11434" ]] && echo "Port 11434 belegt (lokales Ollama?) -> Container-Port ${OLLAMA_PORT}"
+
     OLLAMA_URL=$([[ "$USE_LOCAL_LLM" == "yes" ]] && echo "http://ollama:11434" || echo "http://host.docker.internal:11434")
     cat > .env <<EOF
 POSTGRES_DB=summarizer
@@ -181,6 +190,7 @@ CHAT_MODEL=${CHAT_MODEL}
 EMBEDDING_MODEL=${EMBED_MODEL}
 EMBEDDING_DIM=${EMBED_DIM}
 APP_PORT=${APP_PORT}
+OLLAMA_PORT=${OLLAMA_PORT}
 WHISPER_MODEL=small
 EOF
     echo ".env geschrieben."

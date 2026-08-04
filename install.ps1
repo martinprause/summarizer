@@ -199,6 +199,17 @@ if (-not (Test-Path ".env")) {
     }
     if ($appPort -ne 8181) { Write-Host "Port 8181 belegt -> verwende $appPort" }
 
+    # Freien Host-Port für den Ollama-Container finden - ein bereits auf dem
+    # Host installiertes Ollama belegt sonst 11434 und der Container startet nicht.
+    # (Innerhalb des Container-Netzes reden die Dienste unabhängig davon direkt.)
+    $ollamaPort = 11434
+    while (Get-NetTCPConnection -LocalPort $ollamaPort -State Listen -ErrorAction SilentlyContinue) {
+        $ollamaPort++
+    }
+    if ($ollamaPort -ne 11434) {
+        Write-Host "Port 11434 belegt (lokales Ollama?) -> Container-Port $ollamaPort"
+    }
+
     $ollamaUrl = if ($useLocalLlm) { "http://ollama:11434" } else { "http://host.docker.internal:11434" }
     @"
 POSTGRES_DB=summarizer
@@ -210,6 +221,7 @@ CHAT_MODEL=$chatModel
 EMBEDDING_MODEL=$embedModel
 EMBEDDING_DIM=$embedDim
 APP_PORT=$appPort
+OLLAMA_PORT=$ollamaPort
 WHISPER_MODEL=small
 "@ | Out-File -Encoding utf8 ".env"
     Write-Host ".env geschrieben." -ForegroundColor Green
