@@ -60,6 +60,8 @@ public class MainLayout extends AppLayout {
         nav.addItem(new SideNavItem(getTranslation("nav.archiveChat"), ChatView.class, VaadinIcon.COMMENTS.create()));
         nav.addItem(new SideNavItem(getTranslation("nav.knowledgeGraph"), com.summarizer.graph.ui.GraphView.class,
                 VaadinIcon.CLUSTER.create()));
+        nav.addItem(new SideNavItem(getTranslation("nav.tasks"), com.summarizer.task.ui.TasksView.class,
+                VaadinIcon.TASKS.create()));
         nav.addItem(new SideNavItem(getTranslation("nav.inbox"), InboxView.class, VaadinIcon.INBOX.create()));
         nav.addItem(new SideNavItem(getTranslation("nav.categories"), CategoriesView.class, VaadinIcon.TAGS.create()));
         nav.addItem(new SideNavItem(getTranslation("nav.apiTokens"), TokensView.class, VaadinIcon.KEY.create()));

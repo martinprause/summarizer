@@ -14,6 +14,7 @@
     "@vaadin/vaadin-usage-statistics": "2.1.3",
     "@xyflow/react": "12.6.0",
     "date-fns": "4.1.0",
+    "frappe-gantt": "1.0.3",
     "lit": "3.3.3",
     "ol": "10.6.1",
     "proj4": "2.17.0",
@@ -56,6 +57,7 @@
       "@vaadin/vaadin-usage-statistics": "2.1.3",
       "@xyflow/react": "12.6.0",
       "date-fns": "4.1.0",
+      "frappe-gantt": "1.0.3",
       "lit": "3.3.3",
       "ol": "10.6.1",
       "proj4": "2.17.0",
@@ -85,7 +87,7 @@
       "vite": "8.0.16",
       "vite-plugin-checker": "0.14.4"
     },
-    "hash": "a7420484800b0a685dcc922e2fdad54d853e2fd288a6f02f19a35d216fc2266a"
+    "hash": "c094abd25f63918369df0d876b0b64afcdbd8a5270f74b81fcbfd72be250f6c6"
   },
   "overrides": {
     "@vaadin/common-frontend": "$@vaadin/common-frontend",
@@ -106,6 +108,7 @@
     "lit": "$lit",
     "@vaadin/grid": "25.2.4",
     "@vaadin/router": "2.0.1",
+    "frappe-gantt": "$frappe-gantt",
     "@vaadin/field-base": "25.2.4",
     "@vaadin/vaadin-development-mode-detector": "$@vaadin/vaadin-development-mode-detector",
     "@vaadin/tabsheet": "25.2.4",

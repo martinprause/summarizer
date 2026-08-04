@@ -68,6 +68,13 @@ wer selbst entwickeln will.
 
 ### Windows
 
+Am einfachsten: **`Summarizer-Setup.exe`** von der Releases-Seite laden und
+doppelklicken - grafischer Assistent mit Ordnerwahl, Sprach- und LLM-Auswahl,
+Fortschrittsanzeige. Legt automatisch die Desktop-Verknüpfung **„Summarizer"**
+an (startet Docker, Container und Browser mit einem Klick).
+
+Alternativ per Skript:
+
 1. **`install.bat`** und **`install.ps1`** in einen leeren Ordner legen
    (z. B. `C:\Summarizer`)
 2. Doppelklick auf **`install.bat`**

@@ -68,6 +68,13 @@ You only need the full repository for development.
 
 ### Windows
 
+Easiest: download **`Summarizer-Setup.exe`** from the releases page and
+double-click it - a graphical wizard with folder picker, language and LLM
+selection and a progress view. It also creates the **"Summarizer"** desktop
+shortcut (starts Docker, the containers and the browser with one click).
+
+Alternatively via script:
+
 1. Put **`install.bat`** and **`install.ps1`** into an empty folder
    (e.g. `C:\Summarizer`)
 2. Double-click **`install.bat`**

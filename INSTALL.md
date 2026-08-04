@@ -13,6 +13,11 @@ or the source code.
 
 ## Windows
 
+Easiest: double-click **`Summarizer-Setup.exe`** - graphical wizard
+(folder picker, language, LLM, Whisper option, progress) incl. desktop shortcut.
+
+Alternatively via script:
+
 1. Put **`install.bat`** + **`install.ps1`** into an empty folder (e.g. `C:\Summarizer`)
 2. Double-click **`install.bat`**
 3. Answer the questions (content language, local LLM)

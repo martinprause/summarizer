@@ -78,6 +78,17 @@ public class IngestPipeline {
         if (item == null) {
             return;
         }
+        // Ohne erreichbares Ollama entstuenden leere "DONE"-Items (keine Zusammenfassung,
+        // keine Vektoren). Item bleibt PENDING — der PipelineResumer holt es nach,
+        // sobald Ollama wieder da ist.
+        if (!ollama.isAvailable()) {
+            if (item.getStatus() != Item.Status.PENDING) {
+                item.setStatus(Item.Status.PENDING);
+                items.save(item);
+            }
+            log.warn("Item {}: Ollama nicht erreichbar — Verarbeitung zurückgestellt", itemId);
+            return;
+        }
         item.setStatus(Item.Status.PROCESSING);
         item.setErrorMessage(null);
         items.save(item);

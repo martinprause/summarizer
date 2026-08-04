@@ -46,16 +46,23 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
     private final com.summarizer.item.pipeline.IngestPipeline pipeline;
     private final com.summarizer.ai.EmbeddingService embeddingService;
 
+    private final com.summarizer.task.TaskService taskService;
+    private final com.summarizer.task.TaskRepository taskRepository;
+
     public ItemDetailView(ItemRepository items, CategoryRepository categories, CurrentUser currentUser,
                           com.summarizer.item.TagService tagService,
                           com.summarizer.item.pipeline.IngestPipeline pipeline,
-                          com.summarizer.ai.EmbeddingService embeddingService) {
+                          com.summarizer.ai.EmbeddingService embeddingService,
+                          com.summarizer.task.TaskService taskService,
+                          com.summarizer.task.TaskRepository taskRepository) {
         this.items = items;
         this.categories = categories;
         this.currentUser = currentUser;
         this.tagService = tagService;
         this.pipeline = pipeline;
         this.embeddingService = embeddingService;
+        this.taskService = taskService;
+        this.taskRepository = taskRepository;
         setPadding(true);
         addClassName("fade-in");
     }
@@ -158,6 +165,7 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
 
         addCategoryEditor(item);
         addTagEditor(item);
+        addTaskEditor(item);
 
         if (item.getType() == Item.Type.IMAGE && item.getFilePath() != null
                 && Files.exists(Path.of(item.getFilePath()))) {
@@ -233,6 +241,74 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
         HorizontalLayout row = new HorizontalLayout(tags, save);
         row.setAlignItems(Alignment.END);
         add(row);
+    }
+
+    /** Aufgaben: zugeordnete anzeigen (Chip mit ✕), bestehende wählen oder neue anlegen. */
+    private void addTaskEditor(Item item) {
+        HorizontalLayout row = new HorizontalLayout();
+        row.setAlignItems(Alignment.CENTER);
+        row.getStyle().set("flex-wrap", "wrap").set("gap", "0.4em");
+        Span label = new Span(getTranslation("detail.tasks.title") + ":");
+        label.getStyle().set("font-weight", "600").set("font-size", "0.9em");
+        row.add(label);
+        for (com.summarizer.task.Task task : taskService.tasksForItem(item.getId())) {
+            Span chip = new Span(task.getTitle() + " ✕");
+            chip.getStyle().set("background", "var(--s-accent-soft, #eef)")
+                    .set("color", "var(--s-accent, #3b4bd8)").set("border-radius", "999px")
+                    .set("padding", "0.15em 0.8em").set("font-size", "0.82em")
+                    .set("cursor", "pointer");
+            chip.getElement().setProperty("title", getTranslation("detail.tasks.removeHint"));
+            chip.getElement().addEventListener("click", e -> {
+                taskService.unlinkItem(item.getId(), task.getId());
+                chip.setVisible(false);
+                Notification.show(getTranslation("detail.tasks.removed"));
+            });
+            row.add(chip);
+        }
+        Button assign = new Button(getTranslation("detail.tasks.assign"),
+                e -> openAssignTaskDialog(item));
+        assign.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        row.add(assign);
+        add(row);
+    }
+
+    private void openAssignTaskDialog(Item item) {
+        com.vaadin.flow.component.dialog.Dialog dialog = new com.vaadin.flow.component.dialog.Dialog();
+        dialog.setHeaderTitle(getTranslation("detail.tasks.assignHeader"));
+        dialog.setWidth("420px");
+
+        ComboBox<com.summarizer.task.Task> existing = new ComboBox<>(getTranslation("detail.tasks.existing"));
+        existing.setItems(taskRepository.findByUserIdAndStatusNotOrderByDueDateAscIdAsc(
+                currentUser.id(), com.summarizer.task.Task.Status.DONE));
+        existing.setItemLabelGenerator(com.summarizer.task.Task::getTitle);
+        existing.setWidthFull();
+
+        com.vaadin.flow.component.textfield.TextField newTitle =
+                new com.vaadin.flow.component.textfield.TextField(getTranslation("detail.tasks.newTitle"));
+        newTitle.setWidthFull();
+
+        Button save = new Button(getTranslation("detail.tasks.create"), e -> {
+            com.summarizer.task.Task target = existing.getValue();
+            if (target == null && !newTitle.getValue().isBlank()) {
+                target = new com.summarizer.task.Task(currentUser.id(), newTitle.getValue().strip());
+                target.setStartDate(java.time.LocalDate.now());
+                target.setDueDate(java.time.LocalDate.now().plusDays(7));
+                target = taskRepository.save(target);
+            }
+            if (target == null) {
+                return;
+            }
+            taskService.linkItem(item.getId(), target.getId());
+            dialog.close();
+            Notification.show(getTranslation("detail.tasks.assigned"));
+            removeAll();
+            render(item);
+        });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        dialog.add(new com.vaadin.flow.component.orderedlayout.VerticalLayout(existing, newTitle));
+        dialog.getFooter().add(save);
+        dialog.open();
     }
 
     /** Titel, Zusammenfassung und Inhalt/Beschreibung manuell anpassen; Suche wird aktualisiert. */

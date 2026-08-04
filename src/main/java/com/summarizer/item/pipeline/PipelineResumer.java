@@ -22,10 +22,13 @@ public class PipelineResumer implements ApplicationRunner {
 
     private final JdbcTemplate jdbc;
     private final IngestPipeline pipeline;
+    private final com.summarizer.ai.OllamaClient ollama;
 
-    public PipelineResumer(JdbcTemplate jdbc, IngestPipeline pipeline) {
+    public PipelineResumer(JdbcTemplate jdbc, IngestPipeline pipeline,
+                           com.summarizer.ai.OllamaClient ollama) {
         this.jdbc = jdbc;
         this.pipeline = pipeline;
+        this.ollama = ollama;
     }
 
     @Override
@@ -43,6 +46,28 @@ public class PipelineResumer implements ApplicationRunner {
             pending.forEach(pipeline::process);
         } catch (Exception e) {
             log.warn("Wiederaufnahme der Pipeline fehlgeschlagen: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Zurückgestellte Inhalte regelmäßig nachholen — greift, wenn Ollama beim
+     * ersten Versuch nicht erreichbar war (z. B. Modelle noch im Download).
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 120000, initialDelay = 120000)
+    public void retryPending() {
+        try {
+            if (!ollama.isAvailable()) {
+                return;
+            }
+            List<Long> pending = jdbc.queryForList(
+                    "SELECT id FROM items WHERE status = 'PENDING' ORDER BY id", Long.class);
+            if (pending.isEmpty()) {
+                return;
+            }
+            log.info("Nachverarbeitung: {} wartende Inhalte", pending.size());
+            pending.forEach(pipeline::process);
+        } catch (Exception ignored) {
+            // DB kurz weg — nächster Lauf versucht es erneut
         }
     }
 }

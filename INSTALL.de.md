@@ -12,6 +12,11 @@ erzeugen sie selbst. Das Repository braucht nur, wer Chrome-Addon oder Quellcode
 
 ## Windows
 
+Am einfachsten: **`Summarizer-Setup.exe`** doppelklicken - grafischer Assistent
+(Ordnerwahl, Sprache, LLM, Whisper-Option, Fortschritt) inkl. Desktop-Verknüpfung.
+
+Alternativ per Skript:
+
 1. **`install.bat`** + **`install.ps1`** in einen leeren Ordner legen (z. B. `C:\Summarizer`)
 2. Doppelklick auf **`install.bat`**
 3. Fragen beantworten (Sprache der Inhalte, lokales LLM)

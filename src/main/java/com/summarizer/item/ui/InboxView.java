@@ -54,6 +54,8 @@ public class InboxView extends VerticalLayout {
         add(new H2(getTranslation("inbox.title")));
         add(new Paragraph(getTranslation("inbox.description")));
 
+        grid.addComponentColumn(this::statusBadge)
+                .setHeader(getTranslation("inbox.column.status")).setAutoWidth(true).setFlexGrow(0);
         Grid.Column<Item> titleColumn = grid
                 .addColumn(i -> i.getTitle() == null || i.getTitle().isBlank()
                         ? getTranslation("inbox.noTitle") : i.getTitle())
@@ -75,6 +77,27 @@ public class InboxView extends VerticalLayout {
         grid.setWidthFull();
         add(grid);
         refresh();
+    }
+
+    /** Pipeline-Status: wartet / läuft / fehlgeschlagen / fertig-unsortiert. */
+    private com.vaadin.flow.component.html.Span statusBadge(Item item) {
+        String text;
+        String color;
+        switch (item.getStatus()) {
+            case PENDING -> { text = getTranslation("inbox.status.PENDING"); color = "#757575"; }
+            case PROCESSING -> { text = getTranslation("inbox.status.PROCESSING"); color = "#1a73e8"; }
+            case FAILED -> { text = getTranslation("inbox.status.FAILED"); color = "#c62828"; }
+            default -> { text = getTranslation("inbox.status.UNSORTED"); color = "#8d6e63"; }
+        }
+        com.vaadin.flow.component.html.Span badge = new com.vaadin.flow.component.html.Span(text);
+        badge.getStyle().set("background", color).set("color", "white")
+                .set("border-radius", "999px").set("padding", "0.15em 0.8em")
+                .set("font-size", "0.78em").set("font-weight", "600")
+                .set("white-space", "nowrap");
+        if (item.getStatus() == Item.Status.FAILED && item.getErrorMessage() != null) {
+            badge.getElement().setProperty("title", item.getErrorMessage());
+        }
+        return badge;
     }
 
     private HorizontalLayout assignmentControls(Item item) {
@@ -100,12 +123,42 @@ public class InboxView extends VerticalLayout {
     }
 
     private void refresh() {
+        // Auch alles, was gerade in der Pipeline steckt (Telegram, Chrome, Import)
+        // oder fehlgeschlagen ist — so ist der Verarbeitungsstand hier sichtbar.
         List<Long> ids = jdbc.queryForList("""
                 SELECT id FROM items
-                WHERE user_id = ? AND (category_id IS NULL OR category_confidence < 0.5)
-                ORDER BY created_at DESC
+                WHERE user_id = ? AND (category_id IS NULL OR category_confidence < 0.5
+                       OR status IN ('PENDING', 'PROCESSING', 'FAILED'))
+                ORDER BY (status IN ('PENDING', 'PROCESSING')) DESC, created_at DESC
                 LIMIT 200
                 """, Long.class, currentUser.id());
         grid.setItems(items.findAllById(ids));
+    }
+
+    /** Solange Pipeline-Items da sind: bei Änderungen per Push aktualisieren. */
+    @Override
+    protected void onAttach(com.vaadin.flow.component.AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        UI ui = attachEvent.getUI();
+        Thread.ofVirtual().start(() -> {
+            String lastSignature = "";
+            try {
+                while (true) {
+                    Thread.sleep(4000);
+                    String signature = jdbc.queryForObject("""
+                            SELECT coalesce(string_agg(id || ':' || status, ',' ORDER BY id), '')
+                            FROM items WHERE user_id = ? AND status IN ('PENDING', 'PROCESSING', 'FAILED')
+                            """, String.class, currentUser.id());
+                    if (signature != null && !signature.equals(lastSignature)) {
+                        lastSignature = signature;
+                        ui.access(this::refresh);
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                // UI geschlossen — Wächter beenden
+            }
+        });
     }
 }
