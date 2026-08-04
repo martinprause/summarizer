@@ -20,6 +20,48 @@ public class CategoryTreeService {
         this.repository = repository;
     }
 
+    /**
+     * Quell-Kategorien im Ziel aufgehen lassen: Inhalte und Unterkategorien
+     * wandern zum Ziel, Quellen werden gelöscht. Beschreibungen optional angehängt.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public MergeResult mergeInto(Long userId, Long targetId, List<Long> sourceIds,
+                                 com.summarizer.item.ItemRepository items,
+                                 boolean appendDescriptions) {
+        List<Long> sources = sourceIds.stream()
+                .filter(id -> !id.equals(targetId))
+                .toList();
+        if (sources.isEmpty()) {
+            return new MergeResult(0, 0);
+        }
+        int movedItems = items.reassignCategories(userId, targetId, sources);
+        int movedChildren = repository.reparentChildren(userId, targetId, sources);
+        if (appendDescriptions) {
+            repository.findById(targetId).ifPresent(target -> {
+                StringBuilder description = new StringBuilder(
+                        target.getDescription() == null ? "" : target.getDescription());
+                for (Long id : sources) {
+                    repository.findById(id).ifPresent(source -> {
+                        if (source.getDescription() != null && !source.getDescription().isBlank()
+                                && !description.toString().contains(source.getDescription())) {
+                            if (!description.isEmpty()) {
+                                description.append("; ");
+                            }
+                            description.append(source.getDescription());
+                        }
+                    });
+                }
+                target.setDescription(description.toString());
+                repository.save(target);
+            });
+        }
+        repository.deleteAllById(sources);
+        return new MergeResult(movedItems, movedChildren);
+    }
+
+    public record MergeResult(int movedItems, int movedChildren) {
+    }
+
     public List<Category> roots(Long userId) {
         return repository.findByUserIdOrderBySortOrderAscNameAsc(userId).stream()
                 .filter(c -> c.getParentId() == null)

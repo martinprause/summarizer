@@ -482,3 +482,8 @@ h1, h2 {
     .w-steps li > b { grid-column: 2; }
     .w-steps li > b + * { grid-column: 2; }
 }
+
+/* Strg-Klick-Auswahl im Kategorien-Baum (Zusammenfuehren) */
+vaadin-grid::part(merge-selected) {
+    background: rgba(59, 75, 216, 0.14);
+}

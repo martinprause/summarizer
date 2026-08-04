@@ -227,10 +227,32 @@ public class DashboardView extends HorizontalLayout {
                 .setHeader(getTranslation("dashboard.sidebar.categories"));
         List<Category> roots = normalRoots();
         mainTree.setItems(roots, parent -> categoryTree.children(user.getId(), parent));
-        mainTree.addItemClickListener(e -> handleTreeClick(e.getItem(), mainTree, favTree));
+        mainTree.addItemClickListener(e -> {
+            // Strg+Klick = für Zusammenführen markieren, normaler Klick = filtern
+            if (e.isCtrlKey()) {
+                toggleMergeSelection(e.getItem());
+            } else {
+                clearMergeSelection();
+                handleTreeClick(e.getItem(), mainTree, favTree);
+            }
+        });
         mainTree.expandRecursively(roots, 3);
         mainTree.setSizeFull();
+        mainTree.setPartNameGenerator(c ->
+                mergeSelection.contains(c.getId()) ? "merge-selected" : null);
         buildTreeContextMenu();
+
+        // Leiste über dem Baum: erscheint bei Strg-Auswahl
+        Button doMerge = new Button(getTranslation("dashboard.merge.button"),
+                e -> openMergeDialog());
+        doMerge.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
+        Button clearMerge = new Button("✕", e -> clearMergeSelection());
+        clearMerge.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        mergeInfo.getStyle().set("font-size", "0.8em").set("font-weight", "600");
+        mergeBar.add(mergeInfo, doMerge, clearMerge);
+        mergeBar.setAlignItems(Alignment.CENTER);
+        mergeBar.setVisible(false);
+        sidebar.add(mergeBar);
 
         // Drop-Ziele: Kacheln (Zuweisen) UND Kategorien (Umhängen/Sortieren)
         mainTree.setDropMode(com.vaadin.flow.component.grid.dnd.GridDropMode.ON_TOP_OR_BETWEEN);
@@ -279,6 +301,94 @@ public class DashboardView extends HorizontalLayout {
         sidebar.setFlexGrow(1, mainTree);
     }
 
+    // ---------- Kategorien zusammenführen (Strg-Klick-Auswahl) ----------
+
+    private void toggleMergeSelection(Category category) {
+        if (!mergeSelection.remove(category.getId())) {
+            mergeSelection.add(category.getId());
+        }
+        mergeInfo.setText(getTranslation("dashboard.merge.count", mergeSelection.size()));
+        mergeBar.setVisible(!mergeSelection.isEmpty());
+        mainTree.getDataProvider().refreshAll();
+    }
+
+    private void clearMergeSelection() {
+        if (mergeSelection.isEmpty()) {
+            return;
+        }
+        mergeSelection.clear();
+        mergeBar.setVisible(false);
+        mainTree.getDataProvider().refreshAll();
+    }
+
+    private void openMergeDialog() {
+        if (mergeSelection.size() < 2) {
+            Notification.show(getTranslation("dashboard.merge.needTwo"));
+            return;
+        }
+        List<Category> selected = new ArrayList<>();
+        for (Long id : mergeSelection) {
+            categoryRepository.findById(id).ifPresent(selected::add);
+        }
+        // Ziel-Vorauswahl: Kategorie mit den meisten Inhalten
+        selected.sort((a, b) -> Long.compare(
+                categoryCounts.getOrDefault(b.getId(), 0L),
+                categoryCounts.getOrDefault(a.getId(), 0L)));
+
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("dashboard.merge.title"));
+        dialog.setWidth("460px");
+
+        com.vaadin.flow.component.select.Select<Category> target =
+                new com.vaadin.flow.component.select.Select<>();
+        target.setLabel(getTranslation("dashboard.merge.target"));
+        target.setItems(selected);
+        target.setItemLabelGenerator(c -> c.getName()
+                + " (" + categoryCounts.getOrDefault(c.getId(), 0L) + ")");
+        target.setValue(selected.getFirst());
+        target.setWidthFull();
+
+        Checkbox appendDesc = new Checkbox(getTranslation("dashboard.merge.appendDesc"), true);
+
+        Paragraph summary = new Paragraph(getTranslation("dashboard.merge.summary",
+                selected.size() - 1));
+        summary.getStyle().set("font-size", "0.9em")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        Button merge = new Button(getTranslation("dashboard.merge.execute"), e -> {
+            Category chosen = target.getValue();
+            if (chosen == null) {
+                return;
+            }
+            // Geschützte Kategorien dürfen Ziel sein, aber nie aufgelöst werden
+            boolean protectedSource = selected.stream()
+                    .anyMatch(c -> !c.getId().equals(chosen.getId())
+                            && (c.isFavorites() || c.isDefaultCategory()));
+            if (protectedSource) {
+                Notification.show(getTranslation("dashboard.merge.protected"), 5000,
+                        Notification.Position.MIDDLE);
+                return;
+            }
+            List<Long> sources = selected.stream()
+                    .map(Category::getId)
+                    .filter(id -> !id.equals(chosen.getId()))
+                    .toList();
+            var result = categoryTree.mergeInto(user.getId(), chosen.getId(), sources,
+                    itemRepository, appendDesc.getValue());
+            dialog.close();
+            clearMergeSelection();
+            Notification.show(getTranslation("dashboard.merge.done",
+                    result.movedItems(), result.movedChildren(), chosen.getName()),
+                    6000, Notification.Position.MIDDLE);
+            refreshSidebarTree();
+        });
+        merge.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+        dialog.add(new VerticalLayout(target, appendDesc, summary));
+        dialog.getFooter().add(merge);
+        dialog.open();
+    }
+
     /** Rechtsklick im Kategorien-Baum: umbenennen, Unterkategorie, hoch/runter, löschen. */
     private void buildTreeContextMenu() {
         com.vaadin.flow.component.grid.contextmenu.GridContextMenu<Category> menu =
@@ -299,11 +409,15 @@ public class DashboardView extends HorizontalLayout {
     private void openCategoryEditDialog(Category category) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle(getTranslation("dashboard.cat.rename"));
+        dialog.setWidth("560px");
         TextField name = new TextField(getTranslation("dashboard.cat.name"));
         name.setWidthFull();
         name.setValue(category.getName());
-        TextField description = new TextField(getTranslation("dashboard.cat.keywords"));
+        com.vaadin.flow.component.textfield.TextArea description =
+                new com.vaadin.flow.component.textfield.TextArea(
+                        getTranslation("dashboard.cat.keywords"));
         description.setWidthFull();
+        description.setHeight("110px");
         description.setValue(category.getDescription() == null ? "" : category.getDescription());
         Button save = new Button(getTranslation("dashboard.cat.save"), e -> {
             if (name.getValue().isBlank()) {
@@ -334,10 +448,14 @@ public class DashboardView extends HorizontalLayout {
     private void openCategoryCreateDialog(Category parent) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle(getTranslation("dashboard.cat.addChildTitle", parent.getName()));
+        dialog.setWidth("560px");
         TextField name = new TextField(getTranslation("dashboard.cat.name"));
         name.setWidthFull();
-        TextField description = new TextField(getTranslation("dashboard.cat.keywords"));
+        com.vaadin.flow.component.textfield.TextArea description =
+                new com.vaadin.flow.component.textfield.TextArea(
+                        getTranslation("dashboard.cat.keywords"));
         description.setWidthFull();
+        description.setHeight("110px");
         description.setPlaceholder(getTranslation("dashboard.cat.keywordsPlaceholder"));
         Button save = new Button(getTranslation("dashboard.cat.save"), e -> {
             if (name.getValue().isBlank()) {
@@ -1094,6 +1212,10 @@ public class DashboardView extends HorizontalLayout {
     private Long draggedItemId;
     /** Gerade gezogene Kategorie (Baum-interne Umsortierung). */
     private Category draggedCategory;
+    /** Strg-Klick-Auswahl im Baum für das Zusammenführen. */
+    private final java.util.Set<Long> mergeSelection = new java.util.LinkedHashSet<>();
+    private final Span mergeInfo = new Span();
+    private final HorizontalLayout mergeBar = new HorizontalLayout();
 
     private Div renderCard(ItemQueryService.Card card) {
         Div div = new Div();

@@ -63,6 +63,12 @@ public class LinkCheckService {
         log.info("Link-Check für User {}: {} geprüft, {} tot", userId, done, dead);
     }
 
+    /** Titel-Muster von "Soft-404"-Seiten: Server sagt 200, zeigt aber eine Fehlerseite. */
+    private static final java.util.List<String> SOFT_404_PATTERNS = java.util.List.of(
+            "404", "not found", "page not found", "nicht gefunden", "seite nicht gefunden",
+            "existiert nicht", "nicht verfügbar", "does not exist", "no longer available",
+            "nicht mehr verfügbar", "page introuvable", "gone", "error 410");
+
     private boolean isReachable(HttpClient client, String url) {
         try {
             HttpRequest head = HttpRequest.newBuilder(URI.create(url))
@@ -80,12 +86,45 @@ public class LinkCheckService {
                         .build();
                 status = client.send(get, HttpResponse.BodyHandlers.discarding()).statusCode();
             }
-            return status < 400;
+            if (status >= 400) {
+                return false;
+            }
+            // Soft-404: 200er-Antwort, aber der Seitentitel schreit "nicht gefunden"
+            return !looksLikeSoft404(client, url);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
         } catch (Exception e) {
             return false;   // DNS-Fehler, Timeout, TLS kaputt -> tot
+        }
+    }
+
+    /** Nur den Seiten-TITEL prüfen — Muster im Fließtext wären zu viele Fehlalarme. */
+    private boolean looksLikeSoft404(HttpClient client, String url) {
+        try {
+            HttpRequest get = HttpRequest.newBuilder(URI.create(url))
+                    .GET()
+                    .timeout(Duration.ofSeconds(8))
+                    .header("User-Agent", "Mozilla/5.0 Summarizer-LinkCheck")
+                    .build();
+            String body = client.send(get, HttpResponse.BodyHandlers.ofString()).body();
+            if (body == null) {
+                return false;
+            }
+            String head = body.substring(0, Math.min(body.length(), 20_000)).toLowerCase();
+            int titleStart = head.indexOf("<title");
+            if (titleStart < 0) {
+                return false;
+            }
+            int contentStart = head.indexOf('>', titleStart);
+            int titleEnd = head.indexOf("</title>", titleStart);
+            if (contentStart < 0 || titleEnd < 0 || titleEnd <= contentStart) {
+                return false;
+            }
+            String title = head.substring(contentStart + 1, titleEnd);
+            return SOFT_404_PATTERNS.stream().anyMatch(title::contains);
+        } catch (Exception e) {
+            return false;   // Body nicht lesbar -> nicht als Soft-404 werten
         }
     }
 }

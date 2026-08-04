@@ -111,9 +111,15 @@ public class CategoryArchitectService {
                                                    Kein passender Elternteil: ROOT statt Pfad.
 
                 Regeln für NEW:
-                - Name: 1-3 Wörter, konkret ("Solarenergie", nicht "Sonstiges" oder "Artikel").
-                - Beschreibung: EIN Satz Einsortier-Anweisung mit typischen Schlagworten.
+                - Name: 1-3 Wörter, ein THEMENGEBIET ("Solarenergie", "Computer Vision") —
+                  NIEMALS der Titel, Fachbegriff oder Produktname des Dokuments selbst.
+                - Beschreibung: kurze Einsortier-Anweisung plus 3-6 allgemeine Schlagworte
+                  zum Themengebiet, kommagetrennt. KEINE Zusammenfassung des Dokuments,
+                  KEIN Satz über das Dokument.
                 - Lieber EXISTING als eine fast gleiche neue Kategorie.
+
+                SCHLECHT: NEW|Visiontransformer|Der Vision Transformer (ViT) ist eine Architektur für die Bildklassifikation|…
+                GUT:      NEW|Computer Vision|Bilderkennung und visuelle KI: Bildklassifikation, Objekterkennung, ViT, CNN|Forschung
 
                 %s
 
@@ -154,6 +160,14 @@ public class CategoryArchitectService {
             log.info("Architekt: Kategorie-Name '{}' abgelehnt (Junk/zu lang)", name);
             return Optional.empty();
         }
+        // Dokument-Sätze als "Beschreibung" abfangen ("Der Vision Transformer ist …")
+        // — dann lieber leere Beschreibung als eine irreführende
+        if (description.length() > 180
+                || description.toLowerCase().matches("^(der|die|das|ein|eine|dieser|diese|dieses|this|the)\\s.*")
+                || description.matches(".*\\b(ist|sind|wird|werden|is|are)\\b.*[.!]$")) {
+            log.info("Architekt: Beschreibung von '{}' verworfen (Dokument-Satz statt Schlagworte)", name);
+            description = "";
+        }
         // Existiert schon? Dann wiederverwenden statt neu
         Optional<Category> existing = userCategories.stream()
                 .filter(c -> c.getName().equalsIgnoreCase(name))
@@ -168,9 +182,13 @@ public class CategoryArchitectService {
             return Optional.empty();
         }
 
+        // Zu tief? Dann den Pfad hochklettern und an der tiefsten erlaubten
+        // Stelle einhängen (statt die Kategorie auf die Wurzel zu werfen)
+        Map<Long, Category> byId = new HashMap<>();
+        userCategories.forEach(c -> byId.put(c.getId(), c));
         Category parent = resolveParent(parentPath, userCategories);
-        if (parent != null && depth(parent, userCategories) >= MAX_DEPTH) {
-            parent = null;   // zu tief -> auf oberster Ebene anlegen
+        while (parent != null && depth(parent, userCategories) >= MAX_DEPTH) {
+            parent = parent.getParentId() == null ? null : byId.get(parent.getParentId());
         }
         Category created = new Category(userId, name, description);
         created.setParentId(parent == null ? null : parent.getId());

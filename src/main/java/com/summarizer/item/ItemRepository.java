@@ -19,6 +19,15 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     long countByStatus(Item.Status status);
 
+    /** Inhalte mehrerer Kategorien auf eine Ziel-Kategorie umhängen (Merge). */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("""
+            UPDATE Item i SET i.categoryId = :target
+            WHERE i.userId = :userId AND i.categoryId IN :sources""")
+    int reassignCategories(@org.springframework.data.repository.query.Param("userId") Long userId,
+                           @org.springframework.data.repository.query.Param("target") Long target,
+                           @org.springframework.data.repository.query.Param("sources") java.util.List<Long> sources);
+
     /** Anzahl Items je Kategorie (direkt zugeordnet) — für die Sidebar-Zähler. */
     @org.springframework.data.jpa.repository.Query("""
             SELECT i.categoryId, count(i) FROM Item i
