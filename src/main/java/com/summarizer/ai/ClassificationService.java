@@ -35,11 +35,24 @@ public class ClassificationService {
             return Optional.empty();
         }
         Map<Long, String> paths = buildPaths(categories);
-        String answer = llm.generate(buildPrompt(title, content, categories, paths));
+        // Structured Output: {category_path, confidence} — kein Format-Raten mehr
+        String answer = llm.generate(buildPrompt(title, content, categories, paths),
+                Map.of("type", "object",
+                        "properties", Map.of(
+                                "category_path", Map.of("type", "string"),
+                                "confidence", Map.of("type", "number")),
+                        "required", List.of("category_path", "confidence")));
         if (answer == null || answer.isBlank()) {
             return Optional.empty();
         }
-        return parse(answer, categories, paths);
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            String line = node.path("category_path").asText("")
+                    + "|" + node.path("confidence").asText("0.5");
+            return parse(line, categories, paths);
+        } catch (Exception e) {
+            return parse(answer, categories, paths);   // Fallback: alte Zeilen-Logik
+        }
     }
 
     /** Kategorienliste als Prompt-Baustein (für den kombinierten Pipeline-Aufruf). */

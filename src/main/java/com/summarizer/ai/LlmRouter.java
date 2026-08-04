@@ -19,6 +19,11 @@ public class LlmRouter {
         return ollama.generate(prompt);
     }
 
+    /** Structured Output: JSON-Schema erzwingt das Antwortformat (Ollama ≥ 0.5). */
+    public String generate(String prompt, java.util.Map<String, Object> schema) {
+        return ollama.generate(prompt, schema);
+    }
+
     /** Streaming-Antwort; onToken bekommt jedes Teilstück. */
     public String generateStreaming(String prompt, java.util.function.Consumer<String> onToken) {
         return ollama.generateStream(prompt, onToken);

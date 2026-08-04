@@ -64,13 +64,82 @@ public class GraphExtractionService {
         // Kategorie und Tags des Items sind selbst Themen — sie verbinden Inhalte
         // über Item-Grenzen hinweg zu einem echten Netz.
         Long topicId = linkTopics(item, entityIds);
+        // Structured Output: Schema erzwingt {entities[], relations[]} als JSON
         String answer = llm.generate(promptTemplate()
                 .replace("{{GUARD}}", com.summarizer.ai.PromptSanitizer.GUARD_NOTE)
-                .replace("{{TEXT}}", com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, MAX_CONTENT_CHARS)));
+                .replace("{{TEXT}}", com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, MAX_CONTENT_CHARS)),
+                EXTRACTION_SCHEMA);
         if (answer == null || answer.isBlank()) {
             return;
         }
-        applyExtraction(item, answer, entityIds, topicId);
+        applyJsonExtraction(item, answer, entityIds, topicId);
+    }
+
+    private static final Map<String, Object> EXTRACTION_SCHEMA = Map.of(
+            "type", "object",
+            "properties", Map.of(
+                    "entities", Map.of("type", "array", "maxItems", 5,
+                            "items", Map.of("type", "object",
+                                    "properties", Map.of(
+                                            "name", Map.of("type", "string"),
+                                            "type", Map.of("type", "string",
+                                                    "enum", List.of("PERSON", "ORG", "TECH", "ORT", "CONCEPT")),
+                                            "description", Map.of("type", "string")),
+                                    "required", List.of("name", "type"))),
+                    "relations", Map.of("type", "array", "maxItems", 4,
+                            "items", Map.of("type", "object",
+                                    "properties", Map.of(
+                                            "source", Map.of("type", "string"),
+                                            "target", Map.of("type", "string"),
+                                            "relation", Map.of("type", "string",
+                                                    "enum", List.of("ist Teil von", "nutzt", "arbeitet bei",
+                                                            "gehört zu", "vergleichbar mit"))),
+                                    "required", List.of("source", "target", "relation")))),
+            "required", List.of("entities", "relations"));
+
+    /** JSON-Antwort (Structured Output) in Entitäten/Beziehungen überführen. */
+    private void applyJsonExtraction(Item item, String answer, Map<String, Long> entityIds,
+                                     Long topicId) {
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            int relations = 0;
+            if (node.has("entities")) {
+                for (var entity : node.get("entities")) {
+                    String name = clean(entity.path("name").asText(""));
+                    if (name.isBlank() || name.length() > 200 || isJunkEntity(name)) {
+                        continue;
+                    }
+                    String type = entity.path("type").asText("CONCEPT").toUpperCase();
+                    if (!TYPES.contains(type)) {
+                        type = "CONCEPT";
+                    }
+                    String description = clean(entity.path("description").asText(""));
+                    long id = graph.upsertEntity(item.getUserId(), name, type,
+                            description.isBlank() ? null : description);
+                    graph.linkItem(item.getId(), id);
+                    entityIds.put(name.toLowerCase(), id);
+                    if (topicId != null && topicId != id) {
+                        graph.addRelation(item.getUserId(), id, topicId, "gehört zum Thema", item.getId());
+                    }
+                }
+            }
+            if (node.has("relations")) {
+                for (var relation : node.get("relations")) {
+                    Long source = resolveEntity(item, entityIds, clean(relation.path("source").asText("")));
+                    Long target = resolveEntity(item, entityIds, clean(relation.path("target").asText("")));
+                    String label = relation.path("relation").asText("verbunden mit");
+                    if (source != null && target != null && !source.equals(target)) {
+                        graph.addRelation(item.getUserId(), source, target, label, item.getId());
+                        relations++;
+                    }
+                }
+            }
+            log.info("Item {}: {} Entitäten, {} Beziehungen extrahiert (JSON)",
+                    item.getId(), entityIds.size(), relations);
+        } catch (Exception e) {
+            // Fallback: alte Zeilen-Logik (z. B. bei eigenem Prompt ohne JSON-Bezug)
+            applyExtraction(item, answer, entityIds, topicId);
+        }
     }
 
     /** Aktuell verwendeter Prompt — anpassbar im Studio (Wissensgraph → Prompt). */

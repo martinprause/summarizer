@@ -300,49 +300,76 @@ public class IngestPipeline {
                 .toList();
         List<String> existingTags = tags.allTagNames(item.getUserId());
 
+        boolean transcript = isTranscript(item);
+        int maxBullets = transcript ? 10 : 15;
         String prompt = """
-                Analysiere den folgenden Inhalt und antworte mit GENAU drei Zeilen
-                in diesem Format (spitze Klammern durch echte Werte ersetzen):
+                Analysiere den folgenden Inhalt.
 
-                SUMMARY|<Zusammenfassung in 2-3 prägnanten deutschen Sätzen>
-                CATEGORY|<Kategoriepfad>|<Konfidenz zwischen 0 und 1>
-                TAGS|<schlagwort1>, <schlagwort2>, <schlagwort3>
+                Liefere:
+                - summary: Beschreibung des Inhalts als %s Stichpunkte.
+                  Jeder Stichpunkt EIN kurzer, prägnanter deutscher Satz mit einer Kernaussage.
+                  Keine Wiederholungen, kein Fließtext, keine Einleitung.
+                - category_path: EXAKT einer der folgenden Kategoriepfade
+                  (wähle den SPEZIFISCHSTEN passenden).
+                - confidence: wie sicher die Kategorie passt (0 bis 1).
+                - tags: 2-5 kleingeschriebene Schlagworte, WORUM ES GEHT
+                  (Themen, Orte, Personen, Konzepte). VERBOTEN: Medium/Format/Quelle
+                  (bild, video, pdf, telegram, webseite ...).
+                  Bevorzuge vorhandene Tags, wenn sie passen: %s
 
-                Tags: 2 bis 5 Stück, kleingeschrieben, beschreiben WORUM ES GEHT.
-
-                Kategorien (hierarchisch, "Eltern > Kind" — Pfad EXAKT übernehmen,
-                wähle die SPEZIFISCHSTE passende):
+                Kategorien (hierarchisch, "Eltern > Kind"):
                 %s
-                Regeln für Tags:
-                - Tags beschreiben, WORUM ES GEHT (Themen, Orte, Personen, Konzepte).
-                - VERBOTEN: Medium/Format/Quelle (bild, video, pdf, telegram, webseite ...).
-                - Bevorzuge vorhandene Tags, wenn sie passen: %s
-
                 %s
 
                 Inhalt:
                 %s
                 """.formatted(
+                transcript ? "maximal 10" : "10 bis 15",
+                existingTags.isEmpty() ? "(noch keine vorhanden)" : String.join(", ", existingTags),
                 userCategories.isEmpty() ? "(keine Kategorien definiert)"
                         : classification.categoryListing(userCategories),
-                existingTags.isEmpty() ? "(noch keine vorhanden)" : String.join(", ", existingTags),
                 com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
                 com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 5000));
 
-        String answer = llm.generate(prompt);
+        // Structured Output: Ollama erzwingt valides JSON nach diesem Schema
+        Map<String, Object> schema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "summary", Map.of("type", "array",
+                                "items", Map.of("type", "string"), "maxItems", maxBullets),
+                        "category_path", Map.of("type", "string"),
+                        "confidence", Map.of("type", "number"),
+                        "tags", Map.of("type", "array",
+                                "items", Map.of("type", "string"), "maxItems", 5)),
+                "required", List.of("summary", "category_path", "confidence", "tags"));
+
+        String answer = ollama.generate(prompt, schema);
         String summaryLine = null;
         String categoryLine = null;
         String tagLine = null;
-        if (answer != null) {
-            for (String line : answer.strip().lines().toList()) {
-                String l = line.strip();
-                if (l.regionMatches(true, 0, "SUMMARY|", 0, 8)) {
-                    summaryLine = l.substring(8).strip();
-                } else if (l.regionMatches(true, 0, "CATEGORY|", 0, 9)) {
-                    categoryLine = l.substring(9).strip();
-                } else if (l.regionMatches(true, 0, "TAGS|", 0, 5)) {
-                    tagLine = l.substring(5).strip();
+        if (answer != null && !answer.isBlank()) {
+            try {
+                var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+                if (node.has("summary")) {
+                    summaryLine = bulletList(node.get("summary"));
                 }
+                if (node.has("category_path")) {
+                    categoryLine = node.get("category_path").asText()
+                            + "|" + (node.has("confidence") ? node.get("confidence").asText() : "0.5");
+                }
+                if (node.has("tags") && node.get("tags").isArray()) {
+                    StringBuilder csv = new StringBuilder();
+                    node.get("tags").forEach(tag -> {
+                        if (!csv.isEmpty()) {
+                            csv.append(',');
+                        }
+                        csv.append(tag.asText());
+                    });
+                    tagLine = csv.toString();
+                }
+            } catch (Exception e) {
+                log.warn("Item {}: Structured-Output nicht lesbar ({}) — Einzelschritte greifen",
+                        item.getId(), e.getMessage());
             }
         }
 
@@ -420,23 +447,85 @@ public class IngestPipeline {
             "keywords", "keyword", "kleingeschrieben", "beispiel", "tag1", "tag2", "tag3",
             "schlagwort1", "schlagwort2", "schlagwort3");
 
-    /** 2-3-Sätze-Zusammenfassung — der Namensgeber der App. */
+    /** Stichpunkt-Zusammenfassung — der Namensgeber der App. */
     private void summarize(Item item) {
         String text = item.getRawText();
         if (text == null || text.isBlank() || text.length() < 200) {
             return;   // Kurztexte brauchen keine Zusammenfassung
         }
-        String summary = llm.generate("""
-                Fasse den folgenden Inhalt in 2-3 prägnanten deutschen Sätzen zusammen.
-                Nur die Zusammenfassung, keine Einleitung.
+        boolean transcript = isTranscript(item);
+        String answer = llm.generate("""
+                Beschreibe den folgenden Inhalt als %s Stichpunkte.
+                Jeder Stichpunkt EIN kurzer, prägnanter deutscher Satz mit einer Kernaussage.
+                Keine Wiederholungen, kein Fließtext, keine Einleitung.
 
                 %s
 
                 %s
-                """.formatted(com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
-                com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 6000)));
-        if (summary != null && !summary.isBlank()) {
-            item.setSummary(summary.strip());
+                """.formatted(transcript ? "maximal 10" : "10 bis 15",
+                com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
+                com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 6000)),
+                Map.of("type", "object",
+                        "properties", Map.of("summary", Map.of("type", "array",
+                                "items", Map.of("type", "string"),
+                                "maxItems", transcript ? 10 : 15)),
+                        "required", List.of("summary")));
+        if (answer == null || answer.isBlank()) {
+            return;
+        }
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            String summary = node.has("summary") ? bulletList(node.get("summary")) : null;
+            if (summary != null && !summary.isBlank()) {
+                item.setSummary(summary);
+            }
+        } catch (Exception e) {
+            log.debug("Item {}: Summary-JSON nicht lesbar", item.getId());
+        }
+    }
+
+    /** Transkript-Items (Audio/YouTube): Volltext ist das Transkript, Beschreibung kürzer. */
+    private boolean isTranscript(Item item) {
+        if (item.getType() == Item.Type.AUDIO) {
+            return true;
+        }
+        return item.getSourceUrl() != null
+                && com.summarizer.item.extract.YouTubeTranscriptService.isYoutubeUrl(item.getSourceUrl());
+    }
+
+    /** JSON-Array (oder String) in "• "-Stichpunktzeilen überführen. */
+    static String bulletList(tools.jackson.databind.JsonNode node) {
+        if (node == null) {
+            return null;
+        }
+        if (!node.isArray()) {
+            String text = node.asText("").strip();
+            return text.isBlank() ? null : text;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (var entry : node) {
+            String line = entry.asText("").strip().replaceAll("^[-•*]\\s*", "");
+            if (line.isBlank()) {
+                continue;
+            }
+            if (!sb.isEmpty()) {
+                sb.append('\n');
+            }
+            sb.append("• ").append(line);
+        }
+        return sb.isEmpty() ? null : sb.toString();
+    }
+
+    /** Ein String-Feld aus einer Structured-Output-Antwort ziehen (null-sicher). */
+    static String jsonString(String json, String field) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(json);
+            return node.has(field) ? node.get(field).asText() : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -594,11 +683,29 @@ public class IngestPipeline {
                 """.formatted(existing.isEmpty() ? "(noch keine vorhanden)" : String.join(", ", existing),
                 com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
                 com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 3000));
-        String answer = llm.generate(prompt);
+        String answer = llm.generate(prompt,
+                Map.of("type", "object",
+                        "properties", Map.of("tags", Map.of("type", "array",
+                                "items", Map.of("type", "string"), "maxItems", 5)),
+                        "required", List.of("tags")));
         if (answer == null || answer.isBlank()) {
             return;
         }
-        applyTagLine(item, answer.strip().lines().findFirst().orElse(""));
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            if (node.has("tags") && node.get("tags").isArray()) {
+                StringBuilder csv = new StringBuilder();
+                node.get("tags").forEach(tag -> {
+                    if (!csv.isEmpty()) {
+                        csv.append(',');
+                    }
+                    csv.append(tag.asText());
+                });
+                applyTagLine(item, csv.toString());
+            }
+        } catch (Exception e) {
+            log.debug("Item {}: Tag-JSON nicht lesbar", item.getId());
+        }
     }
 
     private void classify(Item item) {

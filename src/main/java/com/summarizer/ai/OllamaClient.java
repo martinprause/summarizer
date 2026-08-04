@@ -83,6 +83,14 @@ public class OllamaClient {
 
     /** Einzelner Prompt, komplette Antwort (kein Streaming). Null bei Fehler. */
     public String generate(String prompt) {
+        return generate(prompt, null);
+    }
+
+    /**
+     * Structured Output: format = JSON-Schema (Ollama erzwingt dann valides JSON
+     * nach diesem Schema — kein Format-Nachplappern mehr möglich).
+     */
+    public String generate(String prompt, Map<String, Object> format) {
         try {
             GENERATE_SLOTS.acquire();
         } catch (InterruptedException e) {
@@ -90,15 +98,19 @@ public class OllamaClient {
             return null;
         }
         try {
+            java.util.HashMap<String, Object> body = new java.util.HashMap<>();
+            body.put("model", chatModel());
+            body.put("prompt", prompt);
+            body.put("stream", false);
+            body.put("options", Map.of("temperature", 0));
+            if (format != null) {
+                body.put("format", format);
+            }
             for (int attempt = 1; attempt <= 2; attempt++) {
                 try {
                     Map<?, ?> response = restClient.post()
                             .uri("/api/generate")
-                            .body(Map.of(
-                                    "model", chatModel(),
-                                    "prompt", prompt,
-                                    "stream", false,
-                                    "options", Map.of("temperature", 0)))
+                            .body(body)
                             .retrieve()
                             .body(Map.class);
                     return response == null ? null : (String) response.get("response");

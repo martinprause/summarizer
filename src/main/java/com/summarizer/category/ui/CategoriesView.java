@@ -559,14 +559,17 @@ public class CategoriesView extends VerticalLayout {
             Thread.ofVirtual().start(() -> {
                 String answer;
                 try {
-                    answer = llm.generate(buildCategoryPrompt(userWish, parent));
+                    answer = llm.generate(buildCategoryPrompt(userWish, parent), PROPOSAL_SCHEMA);
                 } catch (Exception ex) {
                     answer = null;
                 }
                 String result = answer;
                 ui.access(() -> {
                     generate.setEnabled(true);
-                    List<Proposal> parsed = parseProposals(result);
+                    List<Proposal> parsed = parseProposalsJson(result);
+                    if (parsed.isEmpty()) {
+                        parsed = parseProposals(result);   // Fallback: Zeilenformat
+                    }
                     if (parsed.isEmpty()) {
                         status.setText(getTranslation("categories.ai.empty"));
                         return;
@@ -670,6 +673,74 @@ public class CategoriesView extends VerticalLayout {
                 - Kameras|Kameramodelle, Hersteller, Kaufberatung
                 - - Objektive|Brennweiten, Lichtstärke, Marken
                 """.formatted(wish, context);
+    }
+
+    /** Structured-Output-Schema: bis zu 3 Ebenen Kategorien mit Beschreibung. */
+    private static final Map<String, Object> PROPOSAL_SCHEMA = buildProposalSchema();
+
+    private static Map<String, Object> buildProposalSchema() {
+        Map<String, Object> leaf = Map.of("type", "object",
+                "properties", Map.of(
+                        "name", Map.of("type", "string"),
+                        "description", Map.of("type", "string")),
+                "required", List.of("name"));
+        Map<String, Object> mid = Map.of("type", "object",
+                "properties", Map.of(
+                        "name", Map.of("type", "string"),
+                        "description", Map.of("type", "string"),
+                        "children", Map.of("type", "array", "items", leaf)),
+                "required", List.of("name"));
+        Map<String, Object> top = Map.of("type", "object",
+                "properties", Map.of(
+                        "name", Map.of("type", "string"),
+                        "description", Map.of("type", "string"),
+                        "children", Map.of("type", "array", "items", mid)),
+                "required", List.of("name"));
+        return Map.of("type", "object",
+                "properties", Map.of("categories",
+                        Map.of("type", "array", "maxItems", 8, "items", top)),
+                "required", List.of("categories"));
+    }
+
+    /** JSON-Antwort (Structured Output) in den Vorschlagsbaum überführen. */
+    private List<Proposal> parseProposalsJson(String answer) {
+        List<Proposal> roots = new ArrayList<>();
+        if (answer == null || answer.isBlank()) {
+            return roots;
+        }
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            if (!node.has("categories")) {
+                return roots;
+            }
+            for (var top : node.get("categories")) {
+                Proposal proposal = toProposal(top, null);
+                if (proposal != null) {
+                    roots.add(proposal);
+                }
+            }
+        } catch (Exception e) {
+            return List.of();
+        }
+        return roots;
+    }
+
+    private Proposal toProposal(tools.jackson.databind.JsonNode node, Proposal parent) {
+        String name = node.path("name").asText("").strip();
+        if (name.isBlank() || name.length() > 100) {
+            return null;
+        }
+        Proposal proposal = new Proposal(name, node.path("description").asText(""));
+        proposal.parent = parent;
+        if (node.has("children")) {
+            for (var child : node.get("children")) {
+                Proposal childProposal = toProposal(child, proposal);
+                if (childProposal != null) {
+                    proposal.children.add(childProposal);
+                }
+            }
+        }
+        return proposal;
     }
 
     /** Zeilenformat "-- Name|Beschreibung" in einen Baum überführen. */

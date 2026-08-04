@@ -167,14 +167,15 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
             add(retranscribe);
         }
 
-        // Auto-Zusammenfassung prominent
+        // Auto-Zusammenfassung prominent — Stichpunkte zeilenweise rendern
         if (item.getSummary() != null && !item.getSummary().isBlank()) {
             Div summary = new Div();
             summary.setText(item.getSummary());
             summary.getStyle().set("background", "var(--vaadin-contrast-5pct, #f5f5f5)")
                     .set("border-left", "4px solid var(--vaadin-primary-color, #1a73e8)")
                     .set("border-radius", "6px").set("padding", "0.7em 1em")
-                    .set("max-width", "800px").set("font-style", "italic");
+                    .set("max-width", "800px").set("white-space", "pre-wrap")
+                    .set("line-height", "1.55");
             add(summary);
         }
 
@@ -193,17 +194,26 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
         if (item.getRawText() != null && !item.getRawText().isBlank()) {
             Div text = new Div();
             String raw = item.getRawText();
-            text.setText(raw.length() > 5000 ? raw.substring(0, 5000) + " …" : raw);
+            text.setText(raw.length() > 20000 ? raw.substring(0, 20000) + " …" : raw);
             text.getStyle()
                     .set("white-space", "pre-wrap")
-                    .set("max-width", "800px")
                     .set("max-height", "420px")
                     .set("overflow-y", "auto")
-                    .set("border", "1px solid var(--vaadin-border-color, #ddd)")
-                    .set("border-radius", "8px")
-                    .set("padding", "0.8em 1em")
+                    .set("padding", "0.4em 0.2em")
                     .set("font-size", "0.9em");
-            add(text);
+            // Textwand einklappen — die Stichpunkt-Beschreibung oben reicht meist
+            boolean isTranscriptItem = item.getType() == Item.Type.AUDIO
+                    || (item.getSourceUrl() != null && com.summarizer.item.extract
+                            .YouTubeTranscriptService.isYoutubeUrl(item.getSourceUrl()));
+            com.vaadin.flow.component.details.Details fullText =
+                    new com.vaadin.flow.component.details.Details(
+                            getTranslation(isTranscriptItem ? "detail.transcript" : "detail.fulltext"),
+                            text);
+            fullText.setOpened(false);
+            fullText.getStyle().set("max-width", "800px").set("width", "100%")
+                    .set("border", "1px solid var(--vaadin-border-color, #ddd)")
+                    .set("border-radius", "8px").set("padding", "0 0.6em");
+            add(fullText);
         }
 
         Button edit = new Button(getTranslation("detail.editButton"), e -> openEditDialog(item));

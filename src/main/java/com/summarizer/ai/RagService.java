@@ -38,14 +38,19 @@ public class RagService {
         }
         String context = buildContext(hits);
         String prompt = """
-                Du bist der Assistent eines persönlichen Wissensarchivs. Beantworte die Frage \
-                AUSSCHLIESSLICH mit den folgenden Auszügen und Wissensgraph-Fakten aus dem Archiv. \
-                Deckt ein Auszug das Thema nur teilweise ab, gib wieder, was das Archiv dazu \
-                enthält, und nenne die Quelle — antworte nur dann mit "dazu findet sich nichts", \
-                wenn KEIN Auszug thematisch passt. \
-                Ist die Frage nur ein Stichwort, fasse in eigenen Worten zusammen, was das \
-                Archiv zu diesem Thema enthält — kopiere NIE Auszüge wörtlich. \
-                Verweise auf Quellen in der Form [1], [2]. Antworte in Markdown.
+                Du beantwortest Fragen aus einem persönlichen Wissensarchiv. Nutze \
+                AUSSCHLIESSLICH die folgenden Auszüge und Wissensgraph-Fakten.
+
+                FORMAT — NUR RESULTATE:
+                - Antworte als Markdown-Stichpunkte, jeder Stichpunkt EINE Kernaussage
+                  mit Quellenverweis [1], [2] am Ende.
+                - KEINE Einleitung, KEIN Schlusssatz, KEINE Sätze über das Archiv selbst.
+                - VERBOTEN sind Meta-Sätze wie "Für Informationen zu X siehe [2]" oder
+                  "Dazu findet sich nichts über Y" — lasse Fehlendes einfach weg.
+                - Nur wenn KEIN Auszug thematisch passt, antworte mit genau einem Satz:
+                  "Dazu findet sich nichts im Archiv."
+                - Ist die Frage nur ein Stichwort, liste die Kernaussagen des Archivs
+                  zu diesem Thema — kopiere NIE Auszüge wörtlich.
 
                 %s
 
@@ -54,7 +59,7 @@ public class RagService {
                 %s
                 Frage: %s
 
-                Antwort (auf Deutsch, knapp und präzise):
+                Antwort (auf Deutsch, nur Stichpunkte):
                 """.formatted(PromptSanitizer.GUARD_NOTE,
                 PromptSanitizer.wrapUntrusted(context, 30_000),
                 buildGraphContext(userId, question), question);
@@ -94,18 +99,23 @@ public class RagService {
         String graphContext = buildGraphContext(userId, question);
 
         String prompt = """
-                Du bist der Assistent eines persönlichen Wissensarchivs. Beantworte die Frage \
-                AUSSCHLIESSLICH mit den folgenden Auszügen und Wissensgraph-Fakten aus dem Archiv. \
-                Deckt ein Auszug das Thema nur teilweise ab, gib wieder, was das Archiv dazu \
-                enthält, und nenne die Quelle — antworte nur dann mit "dazu findet sich nichts", \
-                wenn KEIN Auszug thematisch passt. \
-                Verweise auf Quellen in der Form [1], [2].
+                Du beantwortest Fragen aus einem persönlichen Wissensarchiv. Nutze \
+                AUSSCHLIESSLICH die folgenden Auszüge und Wissensgraph-Fakten.
+
+                FORMAT — NUR RESULTATE:
+                - Antworte als Stichpunkte, jeder Stichpunkt EINE Kernaussage
+                  mit Quellenverweis [1], [2] am Ende.
+                - KEINE Einleitung, KEIN Schlusssatz, KEINE Sätze über das Archiv selbst.
+                - VERBOTEN sind Meta-Sätze wie "Für Informationen zu X siehe [2]" oder
+                  "Dazu findet sich nichts über Y" — lasse Fehlendes einfach weg.
+                - Nur wenn KEIN Auszug thematisch passt, antworte mit genau einem Satz:
+                  "Dazu findet sich nichts im Archiv."
 
                 Auszüge:
                 %s%s
                 Frage: %s
 
-                Antwort (auf Deutsch, knapp und präzise):
+                Antwort (auf Deutsch, nur Stichpunkte):
                 """.formatted(context, graphContext, question);
 
         String answer = llm.generate(prompt);

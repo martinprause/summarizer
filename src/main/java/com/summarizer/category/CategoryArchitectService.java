@@ -104,22 +104,20 @@ public class CategoryArchitectService {
 
                 Bestehende Kategorien (Pfade "Eltern > Kind"):
                 %s
-                Entscheide dich für GENAU EINE Antwortzeile:
-                EXISTING|Kategoriepfad          — wenn eine bestehende doch gut passt
-                NEW|Name|Beschreibung|Elternpfad — neue Kategorie, eingehängt unter die
-                                                   passendste bestehende Kategorie.
-                                                   Kein passender Elternteil: ROOT statt Pfad.
+                Entscheide:
+                - action "existing": eine bestehende Kategorie passt doch —
+                  dann category_path EXAKT aus der Liste.
+                - action "new": neue Kategorie nötig — dann name, description und
+                  parent_path (passendste bestehende Oberkategorie, sonst "ROOT").
 
-                Regeln für NEW:
-                - Name: 1-3 Wörter, ein THEMENGEBIET ("Solarenergie", "Computer Vision") —
-                  NIEMALS der Titel, Fachbegriff oder Produktname des Dokuments selbst.
-                - Beschreibung: kurze Einsortier-Anweisung plus 3-6 allgemeine Schlagworte
-                  zum Themengebiet, kommagetrennt. KEINE Zusammenfassung des Dokuments,
-                  KEIN Satz über das Dokument.
-                - Lieber EXISTING als eine fast gleiche neue Kategorie.
-
-                SCHLECHT: NEW|Visiontransformer|Der Vision Transformer (ViT) ist eine Architektur für die Bildklassifikation|…
-                GUT:      NEW|Computer Vision|Bilderkennung und visuelle KI: Bildklassifikation, Objekterkennung, ViT, CNN|Forschung
+                Regeln für "new":
+                - name: 1-3 Wörter, ein THEMENGEBIET ("Solarenergie", "Computer Vision") —
+                  NIEMALS Titel, Fachbegriff oder Produktname des Dokuments selbst.
+                - description: kurze Einsortier-Anweisung plus 3-6 allgemeine Schlagworte
+                  zum Themengebiet, kommagetrennt. KEIN Satz über das Dokument.
+                  SCHLECHT: "Der Vision Transformer ist eine Architektur für ..."
+                  GUT: "Bilderkennung und visuelle KI: Bildklassifikation, Objekterkennung, ViT, CNN"
+                - Lieber "existing" als eine fast gleiche neue Kategorie.
 
                 %s
 
@@ -129,19 +127,34 @@ public class CategoryArchitectService {
                 com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
                 com.summarizer.ai.PromptSanitizer.wrapUntrusted(excerpt, 2500));
 
-        String answer = llm.generate(prompt);
+        String answer = llm.generate(prompt, Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "action", Map.of("type", "string", "enum", List.of("existing", "new")),
+                        "category_path", Map.of("type", "string"),
+                        "name", Map.of("type", "string"),
+                        "description", Map.of("type", "string"),
+                        "parent_path", Map.of("type", "string")),
+                "required", List.of("action")));
         if (answer == null || answer.isBlank()) {
             return Optional.empty();
         }
-        for (String rawLine : answer.strip().lines().toList()) {
-            String line = rawLine.strip();
-            if (line.regionMatches(true, 0, "EXISTING|", 0, 9)) {
-                return classification.matchLine(line.substring(9).strip() + "|0.75", userCategories)
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            String action = node.path("action").asText("");
+            if ("existing".equalsIgnoreCase(action)) {
+                return classification.matchLine(node.path("category_path").asText("") + "|0.75",
+                                userCategories)
                         .map(ClassificationService.Result::category);
             }
-            if (line.regionMatches(true, 0, "NEW|", 0, 4)) {
-                return createNew(userId, line.substring(4), userCategories);
+            if ("new".equalsIgnoreCase(action)) {
+                return createNew(userId,
+                        node.path("name").asText("") + "|" + node.path("description").asText("")
+                                + "|" + node.path("parent_path").asText("ROOT"),
+                        userCategories);
             }
+        } catch (Exception e) {
+            log.debug("Architekt: JSON nicht lesbar ({})", e.getMessage());
         }
         return Optional.empty();
     }
