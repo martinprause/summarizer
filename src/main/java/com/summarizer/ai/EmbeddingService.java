@@ -44,6 +44,7 @@ public class EmbeddingService {
             log.warn("Embedding für Item {} unvollständig ({} von {} Chunks)", itemId, vectors.size(), chunks.size());
             return 0;
         }
+        ensureDimension(vectors.getFirst().size());
         jdbc.update("DELETE FROM item_embeddings WHERE item_id = ?", itemId);
         for (int i = 0; i < chunks.size(); i++) {
             jdbc.update("""
@@ -85,6 +86,39 @@ public class EmbeddingService {
         log.info("Re-Embedding fertig: {}/{} Items", done, itemIds.size());
     }
 
+    /**
+     * Spalten-Dimension an das aktive Embedding-Modell anpassen (z. B. nomic 768,
+     * qwen3-embedding 2560). Bei Wechsel: alte Vektoren sind wertlos — Tabelle leeren,
+     * Spaltentyp ändern; der Embedding-Backfill füllt sie danach wieder auf.
+     * HNSW-Index nur bis 2000 Dimensionen (pgvector-Limit), darüber exakte Suche.
+     */
+    private synchronized void ensureDimension(int dims) {
+        int current = columnDimensions();
+        if (current == dims) {
+            return;
+        }
+        log.warn("Embedding-Dimension wechselt von {} auf {} — Vektor-Tabelle wird neu aufgebaut",
+                current, dims);
+        jdbc.execute("DROP INDEX IF EXISTS idx_item_embeddings_hnsw");
+        jdbc.update("DELETE FROM item_embeddings");
+        jdbc.execute("ALTER TABLE item_embeddings ALTER COLUMN embedding TYPE vector(" + dims + ")");
+        if (dims <= 2000) {
+            jdbc.execute("CREATE INDEX idx_item_embeddings_hnsw ON item_embeddings "
+                    + "USING hnsw (embedding vector_cosine_ops)");
+        } else {
+            log.info("Dimension {} > 2000: HNSW-Index entfällt, pgvector sucht exakt", dims);
+        }
+    }
+
+    /** Aktuelle Dimension der embedding-Spalte (atttypmod = Dimension bei pgvector). */
+    private int columnDimensions() {
+        Integer mod = jdbc.queryForObject("""
+                SELECT atttypmod FROM pg_attribute
+                WHERE attrelid = 'item_embeddings'::regclass AND attname = 'embedding'
+                """, Integer.class);
+        return mod == null ? -1 : mod;
+    }
+
     /** Embedding einer Suchanfrage als pgvector-Literal, leer wenn Ollama nicht erreichbar. */
     public java.util.Optional<String> embedQueryVector(String query) {
         List<List<Double>> vectors = ollama.embed(List.of(query));
@@ -96,6 +130,12 @@ public class EmbeddingService {
     public List<SearchHit> search(Long userId, String query, int limit) {
         List<List<Double>> vectors = ollama.embed(List.of(query));
         if (vectors.isEmpty()) {
+            return List.of();
+        }
+        // Modellwechsel, Backfill noch nicht durch: Anfrage-Vektor passt nicht zur Spalte
+        if (vectors.getFirst().size() != columnDimensions()) {
+            log.warn("Suche übersprungen: Embedding-Dimension {} passt nicht zur Tabelle ({}) — "
+                    + "Neu-Vektorisierung läuft noch", vectors.getFirst().size(), columnDimensions());
             return List.of();
         }
         String vector = toVectorLiteral(vectors.getFirst());

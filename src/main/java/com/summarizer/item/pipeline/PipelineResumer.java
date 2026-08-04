@@ -25,18 +25,23 @@ public class PipelineResumer implements ApplicationRunner {
     private final com.summarizer.ai.OllamaClient ollama;
     private final com.summarizer.graph.GraphExtractionService graphExtraction;
     private final com.summarizer.item.ItemRepository items;
+    private final com.summarizer.ai.EmbeddingService embeddings;
     private final java.util.Set<Long> graphBackfillTried =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Set<Long> embeddingBackfillTried =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public PipelineResumer(JdbcTemplate jdbc, IngestPipeline pipeline,
                            com.summarizer.ai.OllamaClient ollama,
                            com.summarizer.graph.GraphExtractionService graphExtraction,
-                           com.summarizer.item.ItemRepository items) {
+                           com.summarizer.item.ItemRepository items,
+                           com.summarizer.ai.EmbeddingService embeddings) {
         this.jdbc = jdbc;
         this.pipeline = pipeline;
         this.ollama = ollama;
         this.graphExtraction = graphExtraction;
         this.items = items;
+        this.embeddings = embeddings;
     }
 
     @Override
@@ -116,6 +121,51 @@ public class PipelineResumer implements ApplicationRunner {
                         log.debug("Graph-Backfill für Item {} fehlgeschlagen: {}", id, e.getMessage());
                     }
                 });
+            }
+        } catch (Exception ignored) {
+            // nächster Lauf versucht es erneut
+        }
+    }
+
+    /**
+     * Embedding-Backfill: Nach einem Wechsel des Embedding-Modells (andere
+     * Dimension) wird die Vektor-Tabelle geleert — dieser Job vektorisiert
+     * fertige Items ohne Embeddings schubweise neu. Greift auch, wenn einzelne
+     * Embeddings beim Import fehlgeschlagen sind.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 120000, initialDelay = 60000)
+    public void backfillEmbeddings() {
+        try {
+            if (!ollama.isAvailable()) {
+                return;
+            }
+            if (items.countByStatus(com.summarizer.item.Item.Status.PENDING) > 0) {
+                return;   // Import läuft noch — nicht dazwischenfunken
+            }
+            List<Long> missing = jdbc.queryForList("""
+                    SELECT i.id FROM items i
+                    WHERE i.status = 'DONE'
+                      AND NOT EXISTS (SELECT 1 FROM item_embeddings e WHERE e.item_id = i.id)
+                    ORDER BY i.id
+                    LIMIT 40
+                    """, Long.class);
+            missing = missing.stream().filter(id -> !embeddingBackfillTried.contains(id)).toList();
+            if (missing.isEmpty()) {
+                return;
+            }
+            log.info("Embedding-Backfill: {} Inhalte ohne Vektoren", missing.size());
+            for (Long id : missing) {
+                embeddingBackfillTried.add(id);
+                try {
+                    String text = jdbc.queryForObject("""
+                            SELECT coalesce(title,'') || E'\\n' || coalesce(summary,'')
+                                   || E'\\n' || coalesce(raw_text,'')
+                            FROM items WHERE id = ?
+                            """, String.class, id);
+                    embeddings.embedAndStore(id, text);
+                } catch (Exception e) {
+                    log.debug("Embedding-Backfill für Item {} fehlgeschlagen: {}", id, e.getMessage());
+                }
             }
         } catch (Exception ignored) {
             // nächster Lauf versucht es erneut
