@@ -313,7 +313,10 @@ public class IngestPipeline {
                   Wähle die Kategorie, deren Beschreibung am besten passt — eine
                   Unterkategorie NUR, wenn ihre Beschreibung klar zutrifft, im Zweifel
                   die Oberkategorie. NIEMALS eine thematisch falsche Unterkategorie.
-                - confidence: wie sicher die Kategorie passt (0 bis 1).
+                - confidence: wie sicher die Kategorie passt (0 bis 1). SEI STRENG:
+                  0.9+ NUR, wenn die Kategoriebeschreibung das Thema direkt nennt.
+                  Passt nur die Oberkategorie grob, maximal 0.6.
+                  Passt eigentlich KEINE Kategorie richtig, maximal 0.4.
                 - tags: 2-5 kleingeschriebene Schlagworte, WORUM ES GEHT
                   (Themen, Orte, Personen, Konzepte). VERBOTEN: Medium/Format/Quelle
                   (bild, video, pdf, telegram, webseite ...).

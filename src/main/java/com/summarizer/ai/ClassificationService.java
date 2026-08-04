@@ -141,7 +141,11 @@ public class ClassificationService {
                 Kategoriepfad|Konfidenz
 
                 Kategoriepfad exakt wie oben gelistet (inkl. " > " bei Unterkategorien).
-                Konfidenz ist eine Zahl zwischen 0 und 1. Keine weitere Erklärung.
+                Konfidenz ist eine Zahl zwischen 0 und 1. SEI STRENG:
+                0.9+ NUR, wenn die Kategoriebeschreibung das Thema direkt nennt.
+                Passt nur die Oberkategorie grob, maximal 0.6.
+                Passt eigentlich KEINE Kategorie richtig, maximal 0.4.
+                Keine weitere Erklärung.
                 """.formatted(PromptSanitizer.GUARD_NOTE,
                 title == null ? "" : title.replaceAll("[\\r\\n]", " "),
                 PromptSanitizer.wrapUntrusted(content, MAX_CONTENT_CHARS)));
