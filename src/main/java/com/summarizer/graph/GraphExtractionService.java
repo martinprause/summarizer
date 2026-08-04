@@ -312,7 +312,7 @@ public class GraphExtractionService {
             "produkte", "service", "dienst", "app", "computer", "programm", "none",
             // Format-Artefakte: LLM gibt manchmal Spaltennamen/Typen als Entitaet aus
             "entity", "rel", "name", "typ", "type", "quelle", "ziel", "beschreibung",
-            "person", "org", "tech", "ort", "concept", "foto", "domain", "beziehung");
+            "person", "org", "tech", "ort", "concept", "domain", "beziehung");
 
     /**
      * Entität einer REL-Zeile auflösen. Kleine Modelle schreiben Namen leicht
