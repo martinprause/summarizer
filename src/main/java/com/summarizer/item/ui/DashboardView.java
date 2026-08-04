@@ -108,6 +108,7 @@ public class DashboardView extends HorizontalLayout {
     private final com.summarizer.task.TaskService taskService;
     private final com.summarizer.task.TaskRepository taskRepository;
     private final com.summarizer.item.LinkCheckService linkCheck;
+    private final com.summarizer.category.CategoryArchitectService architect;
 
     public DashboardView(ItemQueryService queries, ItemRepository itemRepository,
                          CategoryRepository categories, CategoryTreeService categoryTree,
@@ -117,7 +118,9 @@ public class DashboardView extends HorizontalLayout {
                          com.summarizer.settings.AppSettingsService settings,
                          com.summarizer.task.TaskService taskService,
                          com.summarizer.task.TaskRepository taskRepository,
-                         com.summarizer.item.LinkCheckService linkCheck) {
+                         com.summarizer.item.LinkCheckService linkCheck,
+                         com.summarizer.category.CategoryArchitectService architect) {
+        this.architect = architect;
         this.tags = tags;
         this.settings = settings;
         this.taskService = taskService;
@@ -440,9 +443,50 @@ public class DashboardView extends HorizontalLayout {
             refreshSidebarTree();
         });
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        dialog.add(new VerticalLayout(name, description));
+        dialog.add(new VerticalLayout(name, description, aiKeywordsButton(name, description)));
         dialog.getFooter().add(save);
         dialog.open();
+    }
+
+    /**
+     * "KI-Schlagworte": schlägt per LLM 5 passende Keywords zum Kategorienamen vor
+     * und trägt sie kommagetrennt in das Beschreibungsfeld ein.
+     */
+    private Button aiKeywordsButton(TextField name,
+                                    com.vaadin.flow.component.textfield.TextArea description) {
+        Button suggest = new Button(getTranslation("dashboard.cat.aiKeywords"));
+        suggest.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        suggest.addClickListener(e -> {
+            String categoryName = name.getValue().strip();
+            if (categoryName.isBlank()) {
+                name.setInvalid(true);
+                return;
+            }
+            suggest.setEnabled(false);
+            suggest.setText(getTranslation("dashboard.cat.aiKeywordsRunning"));
+            com.vaadin.flow.component.UI ui = com.vaadin.flow.component.UI.getCurrent();
+            String failedText = getTranslation("dashboard.cat.aiKeywordsFailed");
+            String buttonText = getTranslation("dashboard.cat.aiKeywords");
+            Thread.ofVirtual().start(() -> {
+                String keywords;
+                try {
+                    keywords = architect.describeCategory(categoryName);
+                } catch (Exception ex) {
+                    keywords = "";
+                }
+                String result = keywords;
+                ui.access(() -> {
+                    suggest.setEnabled(true);
+                    suggest.setText(buttonText);
+                    if (result == null || result.isBlank()) {
+                        Notification.show(failedText);
+                    } else {
+                        description.setValue(result);
+                    }
+                });
+            });
+        });
+        return suggest;
     }
 
     private void openCategoryCreateDialog(Category parent) {
@@ -478,7 +522,7 @@ public class DashboardView extends HorizontalLayout {
             refreshSidebarTree();
         });
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        dialog.add(new VerticalLayout(name, description));
+        dialog.add(new VerticalLayout(name, description, aiKeywordsButton(name, description)));
         dialog.getFooter().add(save);
         dialog.open();
     }

@@ -220,18 +220,21 @@ public class CategoryArchitectService {
                 || description.matches(".*\\b(ist|sind|wird|werden|is|are)\\b.*[.!]$");
     }
 
-    /** LLM-Anweisung für eine neue Kategorie nachgenerieren: Schlagworte, die sie beschreiben. */
-    private String describeCategory(String name) {
+    /**
+     * LLM-Anweisung für eine Kategorie generieren: 5 Schlagworte, die sie
+     * beschreiben — genutzt vom Architekten und vom KI-Button im Kategorie-Dialog.
+     */
+    public String describeCategory(String name) {
         String answer = llm.generate("""
-                Nenne 5 bis 8 allgemeine Schlagworte (Keywords), die das Themengebiet
+                Nenne genau 5 allgemeine Schlagworte (Keywords), die das Themengebiet
                 der Archiv-Kategorie "%s" beschreiben. Deutsch, kleingeschrieben.
                 Beispiel für "Computer Vision": bilderkennung, objekterkennung,
-                bildklassifikation, vit, cnn, ocr
+                bildklassifikation, vit, cnn
                 Keine Sätze, keine Erklärung.
                 """.formatted(name),
                 Map.of("type", "object",
                         "properties", Map.of("keywords", Map.of("type", "array",
-                                "items", Map.of("type", "string"), "maxItems", 8)),
+                                "items", Map.of("type", "string"), "maxItems", 5)),
                         "required", List.of("keywords")));
         if (answer == null || answer.isBlank()) {
             return "";
