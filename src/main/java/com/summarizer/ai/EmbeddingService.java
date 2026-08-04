@@ -39,7 +39,9 @@ public class EmbeddingService {
         if (chunks.isEmpty()) {
             return 0;
         }
-        List<List<Double>> vectors = ollama.embed(chunks);
+        String docPrefix = documentPrefix();
+        List<List<Double>> vectors = ollama.embed(docPrefix.isEmpty() ? chunks
+                : chunks.stream().map(c -> docPrefix + c).toList());
         if (vectors.size() != chunks.size()) {
             log.warn("Embedding für Item {} unvollständig ({} von {} Chunks)", itemId, vectors.size(), chunks.size());
             return 0;
@@ -119,16 +121,38 @@ public class EmbeddingService {
         return mod == null ? -1 : mod;
     }
 
+    /**
+     * Instruktions-Embedding-Modelle brauchen einen Prefix vor der SUCHANFRAGE
+     * (Dokumente bleiben roh) — sonst ist das Ranking bei Kurz-Queries unbrauchbar.
+     * qwen3-embedding: Instruct-Format; nomic: search_query/search_document-Paare.
+     */
+    private String queryPrefix() {
+        String model = ollama.embeddingModel().toLowerCase();
+        if (model.contains("qwen3-embedding")) {
+            return "Instruct: Given a web search query, retrieve relevant passages "
+                    + "that answer the query\nQuery: ";
+        }
+        if (model.contains("nomic-embed")) {
+            return "search_query: ";
+        }
+        return "";
+    }
+
+    private String documentPrefix() {
+        return ollama.embeddingModel().toLowerCase().contains("nomic-embed")
+                ? "search_document: " : "";
+    }
+
     /** Embedding einer Suchanfrage als pgvector-Literal, leer wenn Ollama nicht erreichbar. */
     public java.util.Optional<String> embedQueryVector(String query) {
-        List<List<Double>> vectors = ollama.embed(List.of(query));
+        List<List<Double>> vectors = ollama.embed(List.of(queryPrefix() + query));
         return vectors.isEmpty() ? java.util.Optional.empty()
                 : java.util.Optional.of(toVectorLiteral(vectors.getFirst()));
     }
 
     /** Semantische Suche über alle Items eines Users. */
     public List<SearchHit> search(Long userId, String query, int limit) {
-        List<List<Double>> vectors = ollama.embed(List.of(query));
+        List<List<Double>> vectors = ollama.embed(List.of(queryPrefix() + query));
         if (vectors.isEmpty()) {
             return List.of();
         }
