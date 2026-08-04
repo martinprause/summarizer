@@ -61,6 +61,7 @@ public class DashboardView extends HorizontalLayout {
     private final ItemQueryService queries;
     private final ItemRepository itemRepository;
     private final CategoryTreeService categoryTree;
+    private final CategoryRepository categoryRepository;
     private final FavoritesService favoritesService;
     private final IngestPipeline pipeline;
     private final UserRepository userRepository;
@@ -122,6 +123,7 @@ public class DashboardView extends HorizontalLayout {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
         this.linkCheck = linkCheck;
+        this.categoryRepository = categories;
         this.queries = queries;
         this.itemRepository = itemRepository;
         this.categoryTree = categoryTree;
@@ -228,8 +230,170 @@ public class DashboardView extends HorizontalLayout {
         mainTree.addItemClickListener(e -> handleTreeClick(e.getItem(), mainTree, favTree));
         mainTree.expandRecursively(roots, 3);
         mainTree.setSizeFull();
+        buildTreeContextMenu();
+
+        // Kacheln aus dem Inhaltsbereich hierher ziehen = Kategorie zuweisen
+        mainTree.setDropMode(com.vaadin.flow.component.grid.dnd.GridDropMode.ON_TOP);
+        mainTree.addDropListener(e -> {
+            if (draggedItemId == null) {
+                return;
+            }
+            e.getDropTargetItem().ifPresent(category ->
+                    itemRepository.findByIdAndUserId(draggedItemId, user.getId()).ifPresent(item -> {
+                        item.setCategoryId(category.getId());
+                        item.setCategoryConfidence(1.0f);   // manuell = sicher
+                        itemRepository.save(item);
+                        Notification.show(getTranslation("dashboard.dnd.assigned",
+                                category.getName()));
+                        reload();
+                    }));
+            draggedItemId = null;
+        });
         sidebar.add(mainTree);
         sidebar.setFlexGrow(1, mainTree);
+    }
+
+    /** Rechtsklick im Kategorien-Baum: umbenennen, Unterkategorie, hoch/runter, löschen. */
+    private void buildTreeContextMenu() {
+        com.vaadin.flow.component.grid.contextmenu.GridContextMenu<Category> menu =
+                mainTree.addContextMenu();
+        menu.setDynamicContentHandler(category -> category != null);
+        menu.addItem(getTranslation("dashboard.cat.rename"), e ->
+                e.getItem().ifPresent(this::openCategoryEditDialog));
+        menu.addItem(getTranslation("dashboard.cat.addChild"), e ->
+                e.getItem().ifPresent(parent -> openCategoryCreateDialog(parent)));
+        menu.addItem(getTranslation("dashboard.cat.moveUp"), e ->
+                e.getItem().ifPresent(c -> moveCategory(c, -1)));
+        menu.addItem(getTranslation("dashboard.cat.moveDown"), e ->
+                e.getItem().ifPresent(c -> moveCategory(c, +1)));
+        menu.addItem(getTranslation("dashboard.cat.delete"), e ->
+                e.getItem().ifPresent(this::deleteCategoryIfEmpty));
+    }
+
+    private void openCategoryEditDialog(Category category) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("dashboard.cat.rename"));
+        TextField name = new TextField(getTranslation("dashboard.cat.name"));
+        name.setWidthFull();
+        name.setValue(category.getName());
+        TextField description = new TextField(getTranslation("dashboard.cat.keywords"));
+        description.setWidthFull();
+        description.setValue(category.getDescription() == null ? "" : category.getDescription());
+        Button save = new Button(getTranslation("dashboard.cat.save"), e -> {
+            if (name.getValue().isBlank()) {
+                name.setInvalid(true);
+                return;
+            }
+            boolean duplicate = categoryRepository
+                    .findByUserIdOrderBySortOrderAscNameAsc(user.getId()).stream()
+                    .anyMatch(c -> !c.getId().equals(category.getId())
+                            && c.getName().equalsIgnoreCase(name.getValue().strip()));
+            if (duplicate) {
+                name.setInvalid(true);
+                name.setErrorMessage(getTranslation("dashboard.cat.nameExists"));
+                return;
+            }
+            category.setName(name.getValue().strip());
+            category.setDescription(description.getValue());
+            categoryRepository.save(category);
+            dialog.close();
+            refreshSidebarTree();
+        });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        dialog.add(new VerticalLayout(name, description));
+        dialog.getFooter().add(save);
+        dialog.open();
+    }
+
+    private void openCategoryCreateDialog(Category parent) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("dashboard.cat.addChildTitle", parent.getName()));
+        TextField name = new TextField(getTranslation("dashboard.cat.name"));
+        name.setWidthFull();
+        TextField description = new TextField(getTranslation("dashboard.cat.keywords"));
+        description.setWidthFull();
+        description.setPlaceholder(getTranslation("dashboard.cat.keywordsPlaceholder"));
+        Button save = new Button(getTranslation("dashboard.cat.save"), e -> {
+            if (name.getValue().isBlank()) {
+                name.setInvalid(true);
+                return;
+            }
+            boolean duplicate = categoryRepository
+                    .findByUserIdOrderBySortOrderAscNameAsc(user.getId()).stream()
+                    .anyMatch(c -> c.getName().equalsIgnoreCase(name.getValue().strip()));
+            if (duplicate) {
+                name.setInvalid(true);
+                name.setErrorMessage(getTranslation("dashboard.cat.nameExists"));
+                return;
+            }
+            Category created = new Category(user.getId(), name.getValue().strip(),
+                    description.getValue());
+            created.setParentId(parent.getId());
+            categoryRepository.save(created);
+            dialog.close();
+            refreshSidebarTree();
+        });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        dialog.add(new VerticalLayout(name, description));
+        dialog.getFooter().add(save);
+        dialog.open();
+    }
+
+    /** Innerhalb der eigenen Ebene eine Position nach oben/unten. */
+    private void moveCategory(Category category, int direction) {
+        List<Category> siblings = category.getParentId() == null
+                ? normalRoots()
+                : categoryTree.children(user.getId(),
+                        categoryRepository.findById(category.getParentId()).orElse(null));
+        int index = -1;
+        for (int i = 0; i < siblings.size(); i++) {
+            if (siblings.get(i).getId().equals(category.getId())) {
+                index = i;
+                break;
+            }
+        }
+        int target = index + direction;
+        if (index < 0 || target < 0 || target >= siblings.size()) {
+            return;   // schon am Rand
+        }
+        // Stabile Reihenfolge herstellen und die beiden Nachbarn tauschen
+        for (int i = 0; i < siblings.size(); i++) {
+            siblings.get(i).setSortOrder(i);
+        }
+        siblings.get(index).setSortOrder(target);
+        siblings.get(target).setSortOrder(index);
+        categoryRepository.saveAll(siblings);
+        refreshSidebarTree();
+    }
+
+    private void deleteCategoryIfEmpty(Category category) {
+        if (category.isFavorites() || category.isDefaultCategory()) {
+            Notification.show(getTranslation("dashboard.cat.protected"), 5000,
+                    Notification.Position.MIDDLE);
+            return;
+        }
+        List<Long> subtree = categoryTree.selfAndDescendantIds(user.getId(), category.getId());
+        long used = itemRepository.countByCategoryIdIn(subtree);
+        if (used > 0) {
+            Notification.show(getTranslation("dashboard.cat.notEmpty", String.valueOf(used)),
+                    5000, Notification.Position.MIDDLE);
+            return;
+        }
+        categoryRepository.deleteAllById(subtree);
+        Notification.show(getTranslation("dashboard.cat.deleted"));
+        refreshSidebarTree();
+    }
+
+    private void refreshSidebarTree() {
+        categoryCounts = new java.util.HashMap<>();
+        for (Object[] row : itemRepository.countPerCategory(user.getId())) {
+            categoryCounts.put((Long) row[0], (Long) row[1]);
+        }
+        List<Category> roots = normalRoots();
+        mainTree.setItems(roots, parent -> categoryTree.children(user.getId(), parent));
+        mainTree.expandRecursively(roots, 3);
+        categoryBox.setItems(categoryRepository.findByUserIdOrderBySortOrderAscNameAsc(user.getId()));
+        reload();
     }
 
     private List<Category> normalRoots() {
@@ -386,6 +550,7 @@ public class DashboardView extends HorizontalLayout {
         Div card = new Div(searchRow, filterRow);
         card.addClassName("s-toolbar");
         card.getStyle().set("width", "100%")
+                .set("box-sizing", "border-box")   // sonst ragt "Zurücksetzen" aus dem Rand
                 .set("background", "var(--lumo-contrast-5pct, #f4f5f9)")
                 .set("border-radius", "12px")
                 .set("padding", "0.6em 0.9em")
@@ -410,6 +575,8 @@ public class DashboardView extends HorizontalLayout {
                 new com.vaadin.flow.component.menubar.MenuBar();
         addMenu.addThemeVariants(com.vaadin.flow.component.menubar.MenuBarVariant.LUMO_PRIMARY);
         var addRoot = addMenu.addItem(getTranslation("dashboard.add.menu"));
+        addRoot.getSubMenu().addItem(getTranslation("dashboard.link.button"),
+                e -> openAddLinkDialog());
         addRoot.getSubMenu().addItem(getTranslation("dashboard.paste.button"),
                 e -> openPasteDialog());
         addRoot.getSubMenu().addItem(getTranslation("dashboard.upload.button"),
@@ -633,6 +800,54 @@ public class DashboardView extends HorizontalLayout {
         bulkBar.setVisible(true);
     }
 
+    /** Link hinzufügen — YouTube wird transkribiert, alles andere als Lesezeichen geladen. */
+    private void openAddLinkDialog() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("dashboard.link.dialogTitle"));
+        dialog.setWidth("520px");
+        Paragraph hint = new Paragraph(getTranslation("dashboard.link.dialogText"));
+        hint.getStyle().set("font-size", "0.9em")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        TextField url = new TextField(getTranslation("dashboard.link.urlField"));
+        url.setWidthFull();
+        url.setPlaceholder("https://…");
+        url.setClearButtonVisible(true);
+        TextField title = new TextField(getTranslation("dashboard.paste.titleField"));
+        title.setWidthFull();
+        title.setPlaceholder(getTranslation("dashboard.paste.titlePlaceholder"));
+
+        Button save = new Button(getTranslation("dashboard.link.save"), e -> {
+            String value = url.getValue() == null ? "" : url.getValue().strip();
+            if (!value.matches("https?://\\S+")) {
+                url.setInvalid(true);
+                url.setErrorMessage(getTranslation("dashboard.link.invalid"));
+                return;
+            }
+            Item item = new Item(user.getId(),
+                    com.summarizer.item.extract.YouTubeTranscriptService.isYoutubeUrl(value)
+                            ? Item.Type.WEBPAGE : Item.Type.BOOKMARK);
+            item.setSourceUrl(value);
+            if (!title.getValue().isBlank()) {
+                item.setTitle(title.getValue().strip());
+            }
+            itemRepository.save(item);
+            pipeline.process(item.getId());
+            dialog.close();
+            Notification.show(getTranslation(
+                    com.summarizer.item.extract.YouTubeTranscriptService.isYoutubeUrl(value)
+                            ? "dashboard.link.savedYoutube" : "dashboard.link.saved"));
+            reload();
+        });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        save.addClickShortcut(com.vaadin.flow.component.Key.ENTER);
+
+        dialog.add(hint, url, title);
+        dialog.getFooter().add(save);
+        dialog.open();
+        url.focus();
+    }
+
     /** Text aus der Zwischenablage einfügen — läuft durch die komplette Pipeline. */
     private void openPasteDialog() {
         Dialog dialog = new Dialog();
@@ -813,10 +1028,20 @@ public class DashboardView extends HorizontalLayout {
 
     // ---------- Karten ----------
 
+    /** Gerade gezogene Kachel (Item-ID) — Ziel ist der Kategorien-Baum links. */
+    private Long draggedItemId;
+
     private Div renderCard(ItemQueryService.Card card) {
         Div div = new Div();
         div.addClassNames("s-card", "stagger-item");
         div.getStyle().set("overflow", "hidden");   // nichts ragt in Nachbarkarten
+
+        // Kachel per Drag&Drop auf eine Kategorie im Baum ziehen
+        com.vaadin.flow.component.dnd.DragSource<Div> drag =
+                com.vaadin.flow.component.dnd.DragSource.create(div);
+        drag.setDraggable(true);
+        drag.addDragStartListener(e -> draggedItemId = card.id());
+        drag.addDragEndListener(e -> draggedItemId = null);
         div.addClickListener(e -> UI.getCurrent().navigate(ItemDetailView.class, card.id()));
 
         // Vorschaubild: og:image der Webseite ODER das Bild selbst bei IMAGE-Items
