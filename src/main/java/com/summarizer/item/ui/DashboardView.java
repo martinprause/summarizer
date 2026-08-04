@@ -286,9 +286,10 @@ public class DashboardView extends HorizontalLayout {
 
     // ---------- Filterleiste ----------
 
-    private FlexLayout buildFilterBar(CategoryRepository categories) {
+    private com.vaadin.flow.component.Component buildFilterBar(CategoryRepository categories) {
         searchField.setPlaceholder(getTranslation("dashboard.filter.search.placeholder"));
-        searchField.setWidth("220px");
+        searchField.setWidth("300px");
+        searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
         searchField.setClearButtonVisible(true);
         // Live-Suche: nach kurzer Tipp-Pause automatisch suchen, kein Klick noetig
         searchField.setValueChangeMode(com.vaadin.flow.data.value.ValueChangeMode.LAZY);
@@ -350,9 +351,9 @@ public class DashboardView extends HorizontalLayout {
             }
         });
 
-        Button search = new Button(getTranslation("dashboard.filter.searchButton"), e -> reload());
-        search.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        search.addClickShortcut(com.vaadin.flow.component.Key.ENTER);
+        // Enter = sofort suchen (Live-Suche greift sonst nach 500 ms)
+        searchField.addKeyPressListener(com.vaadin.flow.component.Key.ENTER, e -> reload());
+
         Button reset = new Button(getTranslation("dashboard.filter.reset"), e -> {
             searchField.clear();
             categoryBox.clear();
@@ -361,16 +362,35 @@ public class DashboardView extends HorizontalLayout {
             fromDate.clear();
             toDate.clear();
             deadBox.setValue(false);
+            includeSubs.setValue(true);
             clearTreeSelection();
             reload();
         });
+        reset.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
 
-        FlexLayout bar = new FlexLayout(searchField, semanticBox, categoryBox, includeSubs,
-                typeBox, tagBox, fromDate, toDate, deadBox, search, reset);
-        bar.setFlexWrap(FlexLayout.FlexWrap.WRAP);
-        bar.addClassName("s-toolbar");
-        bar.getStyle().set("gap", "0.5em").set("align-items", "end").set("width", "100%");
-        return bar;
+        // Zeile 1: Suche + Semantik-Schalter, rechts Zurücksetzen
+        Div rowSpacer = new Div();
+        HorizontalLayout searchRow = new HorizontalLayout(searchField, semanticBox,
+                rowSpacer, reset);
+        searchRow.setAlignItems(Alignment.CENTER);
+        searchRow.setWidthFull();
+        searchRow.setFlexGrow(1, rowSpacer);
+
+        // Zeile 2: alle Filter, einheitlich und umbrechend
+        FlexLayout filterRow = new FlexLayout(categoryBox, includeSubs, typeBox, tagBox,
+                fromDate, toDate, deadBox);
+        filterRow.setFlexWrap(FlexLayout.FlexWrap.WRAP);
+        filterRow.getStyle().set("gap", "0.4em 0.8em").set("align-items", "center")
+                .set("width", "100%");
+
+        Div card = new Div(searchRow, filterRow);
+        card.addClassName("s-toolbar");
+        card.getStyle().set("width", "100%")
+                .set("background", "var(--lumo-contrast-5pct, #f4f5f9)")
+                .set("border-radius", "12px")
+                .set("padding", "0.6em 0.9em")
+                .set("display", "flex").set("flex-direction", "column").set("gap", "0.45em");
+        return card;
     }
 
     // ---------- Toolbar: Sortier-Badges (DnD), Ansicht, Import ----------
@@ -385,28 +405,27 @@ public class DashboardView extends HorizontalLayout {
         Button list = new Button(VaadinIcon.LINES_LIST.create(), e -> switchView("LIST"));
         list.setTooltipText(getTranslation("dashboard.view.list"));
 
-        Button importButton = new Button(getTranslation("dashboard.import.button"),
-                VaadinIcon.UPLOAD.create(), e -> openImportDialog());
-        importButton.setTooltipText(getTranslation("dashboard.import.tooltip"));
+        // Ein "+ Hinzufügen"-Menü statt drei einzelner Buttons — deutlich ruhiger
+        com.vaadin.flow.component.menubar.MenuBar addMenu =
+                new com.vaadin.flow.component.menubar.MenuBar();
+        addMenu.addThemeVariants(com.vaadin.flow.component.menubar.MenuBarVariant.LUMO_PRIMARY);
+        var addRoot = addMenu.addItem(getTranslation("dashboard.add.menu"));
+        addRoot.getSubMenu().addItem(getTranslation("dashboard.paste.button"),
+                e -> openPasteDialog());
+        addRoot.getSubMenu().addItem(getTranslation("dashboard.upload.button"),
+                e -> openUploadDialog());
+        addRoot.getSubMenu().addItem(getTranslation("dashboard.import.button"),
+                e -> openImportDialog());
 
-        Button uploadButton = new Button(getTranslation("dashboard.upload.button"),
-                VaadinIcon.FILE_ADD.create(), e -> openUploadDialog());
-        uploadButton.setTooltipText(getTranslation("dashboard.upload.tooltip"));
-
-        Button pasteButton = new Button(getTranslation("dashboard.paste.button"),
-                VaadinIcon.PASTE.create(), e -> openPasteDialog());
-        pasteButton.setTooltipText(getTranslation("dashboard.paste.tooltip"));
-
-        Button checkLinks = new Button(getTranslation("dashboard.linkcheck.button"),
-                VaadinIcon.LINK.create(), e -> {
-                    linkCheck.checkAll(user.getId());
-                    Notification.show(getTranslation("dashboard.linkcheck.started"));
-                });
+        Button checkLinks = new Button(VaadinIcon.LINK.create(), e -> {
+            linkCheck.checkAll(user.getId());
+            Notification.show(getTranslation("dashboard.linkcheck.started"));
+        });
         checkLinks.setTooltipText(getTranslation("dashboard.linkcheck.tooltip"));
 
         Div spacer = new Div();
         HorizontalLayout toolbar = new HorizontalLayout(label, sortBar, spacer, tiles, list,
-                importButton, uploadButton, pasteButton, checkLinks);
+                checkLinks, addMenu);
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.setFlexGrow(1, spacer);
         toolbar.setWidthFull();
@@ -797,6 +816,7 @@ public class DashboardView extends HorizontalLayout {
     private Div renderCard(ItemQueryService.Card card) {
         Div div = new Div();
         div.addClassNames("s-card", "stagger-item");
+        div.getStyle().set("overflow", "hidden");   // nichts ragt in Nachbarkarten
         div.addClickListener(e -> UI.getCurrent().navigate(ItemDetailView.class, card.id()));
 
         // Vorschaubild: og:image der Webseite ODER das Bild selbst bei IMAGE-Items
@@ -832,7 +852,10 @@ public class DashboardView extends HorizontalLayout {
 
         Span title = new Span(card.title() == null || card.title().isBlank()
                 ? getTranslation("dashboard.card.noTitle") : card.title());
-        title.getStyle().set("font-weight", "600").set("line-height", "1.3");
+        title.getStyle().set("font-weight", "600").set("line-height", "1.3")
+                // lange URLs/Pfade umbrechen statt in die Nachbarkarte zu laufen
+                .set("overflow-wrap", "anywhere").set("word-break", "break-word")
+                .set("min-width", "0");
         titleRow.add(title);
         titleRow.setFlexGrow(1, title);
         titleRow.add(taskButton(card));
