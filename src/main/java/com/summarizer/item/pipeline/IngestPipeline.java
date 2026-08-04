@@ -309,8 +309,10 @@ public class IngestPipeline {
                 - summary: Beschreibung des Inhalts als %s Stichpunkte.
                   Jeder Stichpunkt EIN kurzer, prägnanter deutscher Satz mit einer Kernaussage.
                   Keine Wiederholungen, kein Fließtext, keine Einleitung.
-                - category_path: EXAKT einer der folgenden Kategoriepfade
-                  (wähle den SPEZIFISCHSTEN passenden).
+                - category_path: EXAKT einer der folgenden Kategoriepfade.
+                  Wähle die Kategorie, deren Beschreibung am besten passt — eine
+                  Unterkategorie NUR, wenn ihre Beschreibung klar zutrifft, im Zweifel
+                  die Oberkategorie. NIEMALS eine thematisch falsche Unterkategorie.
                 - confidence: wie sicher die Kategorie passt (0 bis 1).
                 - tags: 2-5 kleingeschriebene Schlagworte, WORUM ES GEHT
                   (Themen, Orte, Personen, Konzepte). VERBOTEN: Medium/Format/Quelle
@@ -331,13 +333,17 @@ public class IngestPipeline {
                 com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
                 com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 5000));
 
-        // Structured Output: Ollama erzwingt valides JSON nach diesem Schema
+        // Structured Output: Ollama erzwingt valides JSON nach diesem Schema;
+        // enum zwingt category_path auf einen existierenden Pfad
+        Map<String, Object> categoryPathSchema = userCategories.isEmpty()
+                ? Map.of("type", "string")
+                : Map.of("type", "string", "enum", classification.pathList(userCategories));
         Map<String, Object> schema = Map.of(
                 "type", "object",
                 "properties", Map.of(
                         "summary", Map.of("type", "array",
                                 "items", Map.of("type", "string"), "maxItems", maxBullets),
-                        "category_path", Map.of("type", "string"),
+                        "category_path", categoryPathSchema,
                         "confidence", Map.of("type", "number"),
                         "tags", Map.of("type", "array",
                                 "items", Map.of("type", "string"), "maxItems", 5)),

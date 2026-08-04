@@ -43,6 +43,7 @@ public class MainLayout extends AppLayout {
     private volatile boolean whisperDown;
 
     private final com.summarizer.ai.WhisperClient whisper;
+    private final com.summarizer.item.pipeline.PipelineEtaService eta;
 
     public MainLayout(AuthenticationContext authContext,
                       com.summarizer.settings.AppSettingsService settings,
@@ -50,12 +51,14 @@ public class MainLayout extends AppLayout {
                       com.summarizer.base.JobProgressService jobs,
                       com.summarizer.base.CurrentUser currentUser,
                       com.summarizer.ai.OllamaClient ollama,
-                      com.summarizer.ai.WhisperClient whisper) {
+                      com.summarizer.ai.WhisperClient whisper,
+                      com.summarizer.item.pipeline.PipelineEtaService eta) {
         this.jdbc = jdbc;
         this.jobs = jobs;
         this.currentUser = currentUser;
         this.ollama = ollama;
         this.whisper = whisper;
+        this.eta = eta;
         com.vaadin.flow.component.html.Div logo = new com.vaadin.flow.component.html.Div();
         logo.setText("S");
         logo.addClassName("s-logo");
@@ -281,11 +284,30 @@ public class MainLayout extends AppLayout {
                     text.append("  ·  ");
                 }
                 text.append(getTranslation("nav.status.processing", active));
+                // Ab 6 wartenden Items: geschätzte Restdauer aus dem Durchsatz
+                if (active > 5) {
+                    eta.remaining(active).ifPresent(duration ->
+                            text.append(' ').append(getTranslation("nav.status.eta",
+                                    formatDuration(duration))));
+                }
             }
             statusChip.setText(text.toString());
             statusChip.setVisible(!text.isEmpty());
         } catch (Exception e) {
             statusChip.setVisible(false);
         }
+    }
+
+    /** "~3 min", "~1 h 20 min", unter einer Minute "< 1 min". */
+    private static String formatDuration(java.time.Duration duration) {
+        long minutes = duration.toMinutes();
+        if (minutes < 1) {
+            return "< 1 min";
+        }
+        if (minutes < 60) {
+            return "~" + minutes + " min";
+        }
+        long rest = minutes % 60;
+        return "~" + duration.toHours() + " h" + (rest > 0 ? " " + rest + " min" : "");
     }
 }

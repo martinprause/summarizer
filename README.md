@@ -1,4 +1,4 @@
-﻿[🇩🇪 Deutsch](README.de.md) · 🇬🇧 English
+[🇩🇪 Deutsch](README.de.md) · 🇬🇧 English
 
 # Summarizer Studio
 

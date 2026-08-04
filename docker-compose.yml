@@ -1,4 +1,4 @@
-﻿# Profile:
+# Profile:
 #   (ohne)      -> nur Postgres (lokale Entwicklung, App aus IDE/Maven)
 #   app         -> komplette App im Container
 #   local-llm   -> Ollama-Container (Modelle via 'ollama pull' im Container)

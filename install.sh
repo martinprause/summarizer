@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Summarizer Installer (Linux/macOS)
 set -euo pipefail
 echo "=== Summarizer Installation ==="

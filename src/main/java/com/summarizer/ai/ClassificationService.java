@@ -35,11 +35,12 @@ public class ClassificationService {
             return Optional.empty();
         }
         Map<Long, String> paths = buildPaths(categories);
-        // Structured Output: {category_path, confidence} — kein Format-Raten mehr
+        // Structured Output: enum zwingt auf einen EXISTIERENDEN Kategoriepfad
         String answer = llm.generate(buildPrompt(title, content, categories, paths),
                 Map.of("type", "object",
                         "properties", Map.of(
-                                "category_path", Map.of("type", "string"),
+                                "category_path", Map.of("type", "string",
+                                        "enum", pathList(categories)),
                                 "confidence", Map.of("type", "number")),
                         "required", List.of("category_path", "confidence")));
         if (answer == null || answer.isBlank()) {
@@ -69,6 +70,15 @@ public class ClassificationService {
                     sb.append('\n');
                 });
         return sb.toString();
+    }
+
+    /** Alle Kategoriepfade als Liste — für enum-Constraints im Structured Output. */
+    public List<String> pathList(List<Category> categories) {
+        Map<Long, String> paths = buildPaths(categories);
+        return categories.stream()
+                .map(c -> paths.get(c.getId()))
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
     }
 
     /** Eine "Pfad|Konfidenz"-Zeile gegen die Kategorien auflösen (kombinierter Aufruf). */
@@ -116,9 +126,10 @@ public class ClassificationService {
                 });
         prompt.append("""
 
-                REGEL: Wähle die SPEZIFISCHSTE passende Kategorie, also die tiefste Ebene,
-                deren Beschreibung zutrifft. Eine übergeordnete Kategorie nur dann,
-                wenn keine ihrer Unterkategorien passt.
+                REGEL: Wähle die Kategorie, deren Beschreibung am besten zum Inhalt passt.
+                Eine Unterkategorie NUR, wenn ihre Beschreibung klar zutrifft — im Zweifel
+                die Oberkategorie. NIEMALS eine thematisch falsche Unterkategorie wählen,
+                nur um spezifischer zu sein.
 
                 %s
 
