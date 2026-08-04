@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Summarizer Installer (Linux/macOS)
 set -euo pipefail
 echo "=== Summarizer Installation ==="
@@ -70,9 +70,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-summarizer}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      CHAT_MODEL: ${CHAT_MODEL:-llama3.2:latest}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:4b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       FILES_DIR: /data/files
       WHISPER_BASE_URL: http://whisper:9000
@@ -106,7 +106,7 @@ services:
     command: >
       "until ollama list >/dev/null 2>&1; do sleep 2; done &&
        ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
-       ollama pull ${EMBEDDING_MODEL:-nomic-embed-text}"
+       ollama pull ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
     restart: "no"
 
   # Whisper: Audio-Transkription (Sprachnachrichten aus der App)
@@ -150,20 +150,14 @@ fi
 
 # --- 2. Konfiguration abfragen ---
 if [[ ! -f .env ]]; then
-    read -rp "Sprache deiner Inhalte? [1] Deutsch (Standard) [2] Englisch: " lang
-    if [[ "${lang:-1}" == "2" ]]; then EMBED_MODEL=nomic-embed-text; EMBED_DIM=768
-    else EMBED_MODEL=bge-m3; EMBED_DIM=1024; fi
+    # Standard-Modelle: mehrsprachig, laufen auch auf kleinen GPUs gemeinsam im VRAM.
+    # Beides im Studio unter "KI-Modelle" änderbar.
+    EMBED_MODEL=qwen3-embedding:0.6b; EMBED_DIM=1024
+    CHAT_MODEL=qwen3.5:4b
+    echo "Modelle: Chat ${CHAT_MODEL}, Embeddings ${EMBED_MODEL} (änderbar im Studio unter 'KI-Modelle')"
 
     read -rp "Lokales LLM (Ollama im Container) verwenden? [J/n]: " locallm
     USE_LOCAL_LLM=$([[ "${locallm:-j}" == "n" ]] && echo no || echo yes)
-
-    if [[ "$(uname)" == "Darwin" ]]; then
-        RAM_GB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
-    else
-        RAM_GB=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
-    fi
-    if (( RAM_GB >= 16 )); then CHAT_MODEL=qwen3.5:9b; else CHAT_MODEL=qwen3.5:4b; fi
-    echo "RAM: ${RAM_GB} GB -> Chat-Modell: ${CHAT_MODEL} (änderbar im Studio unter 'KI-Modelle')"
 
     # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer änderbar
     ADMIN_PW=""

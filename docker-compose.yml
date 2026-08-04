@@ -1,4 +1,4 @@
-# Profile:
+﻿# Profile:
 #   (ohne)      -> nur Postgres (lokale Entwicklung, App aus IDE/Maven)
 #   app         -> komplette App im Container
 #   local-llm   -> Ollama-Container (Modelle via 'ollama pull' im Container)
@@ -44,9 +44,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-summarizer}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      CHAT_MODEL: ${CHAT_MODEL:-llama3.2:latest}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:4b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       FILES_DIR: /data/files
       WHISPER_BASE_URL: http://whisper:9000
@@ -80,7 +80,7 @@ services:
     command: >
       "until ollama list >/dev/null 2>&1; do sleep 2; done &&
        ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
-       ollama pull ${EMBEDDING_MODEL:-nomic-embed-text}"
+       ollama pull ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
     restart: "no"
 
   # Whisper: Audio-Transkription (Sprachnachrichten aus der App)

@@ -99,9 +99,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-summarizer}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      CHAT_MODEL: ${CHAT_MODEL:-llama3.2:latest}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:4b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       FILES_DIR: /data/files
       WHISPER_BASE_URL: http://whisper:9000
@@ -135,7 +135,7 @@ services:
     command: >
       "until ollama list >/dev/null 2>&1; do sleep 2; done &&
        ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
-       ollama pull ${EMBEDDING_MODEL:-nomic-embed-text}"
+       ollama pull ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
     restart: "no"
 
   # Whisper: Audio-Transkription (Sprachnachrichten aus der App)
@@ -180,16 +180,14 @@ services:
 # --- 2. Konfiguration abfragen ---
 if (-not (Test-Path ".env")) {
     Write-Host ""
-    $lang = Read-Host "Sprache deiner Inhalte? [1] Deutsch (Standard)  [2] Englisch"
-    if ($lang -eq "2") { $embedModel = "nomic-embed-text"; $embedDim = 768 }
-    else { $embedModel = "bge-m3"; $embedDim = 1024 }
+    # Standard-Modelle: mehrsprachig, laufen auch auf kleinen GPUs gemeinsam im VRAM.
+    # Beides im Studio unter "KI-Modelle" änderbar.
+    $embedModel = "qwen3-embedding:0.6b"; $embedDim = 1024
+    $chatModel = "qwen3.5:4b"
+    Write-Host "Modelle: Chat $chatModel, Embeddings $embedModel (änderbar im Studio unter 'KI-Modelle')"
 
     $localLlm = Read-Host "Lokales LLM (Ollama im Container) verwenden? [J/n]"
     $useLocalLlm = $localLlm -ne "n"
-
-    $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
-    if ($ram -ge 16) { $chatModel = "qwen3.5:9b" } else { $chatModel = "qwen3.5:4b" }
-    Write-Host "RAM: $ram GB -> Chat-Modell: $chatModel (änderbar im Studio unter 'KI-Modelle')"
 
     # Admin-Zugang: Standard admin/admin - Passwort im Studio unter Benutzer änderbar
     $adminPw = ""

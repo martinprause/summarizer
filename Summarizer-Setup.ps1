@@ -227,9 +227,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-summarizer}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-summarizer}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      CHAT_MODEL: ${CHAT_MODEL:-llama3.2:latest}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:4b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       FILES_DIR: /data/files
       WHISPER_BASE_URL: http://whisper:9000
@@ -263,7 +263,7 @@ services:
     command: >
       "until ollama list >/dev/null 2>&1; do sleep 2; done &&
        ollama pull ${CHAT_MODEL:-qwen3.5:4b} &&
-       ollama pull ${EMBEDDING_MODEL:-nomic-embed-text}"
+       ollama pull ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
     restart: "no"
 
   # Whisper: Audio-Transkription (Sprachnachrichten aus der App)
@@ -452,11 +452,10 @@ start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File
         # 3. Konfiguration schreiben (bestehende .env bleibt erhalten)
         Set-Status "Schreibe Konfiguration ..." 24
         $envExists = Test-Path ".env"
-        if ($langBox.SelectedIndex -eq 1) { $embed = "nomic-embed-text"; $dim = 768 }
-        else { $embed = "bge-m3"; $dim = 1024 }
-        $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
-        $chat = if ($ram -ge 16) { "qwen3.5:9b" } else { "qwen3.5:4b" }
-        Write-Log "RAM ${ram} GB -> Chat-Modell $chat, Embeddings $embed"
+        # Standard-Modelle: mehrsprachig, laufen auch auf kleinen GPUs gemeinsam im VRAM
+        $embed = "qwen3-embedding:0.6b"; $dim = 1024
+        $chat = "qwen3.5:4b"
+        Write-Log "Modelle: Chat $chat, Embeddings $embed (änderbar im Studio unter 'KI-Modelle')"
         $ollamaUrl = if ($llmBox.SelectedIndex -eq 0) { "http://ollama:11434" }
                      else { "http://host.docker.internal:11434" }
         $dbPassword = [guid]::NewGuid().ToString('N').Substring(0, 16)
