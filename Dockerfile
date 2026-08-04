@@ -26,6 +26,14 @@ RUN mvn -B -q -DskipTests -Pproduction package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
+# yt-dlp (eigenständiges Binary) + ffmpeg für YouTube-Transkripte
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+         -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp
+
 # Nicht als root laufen
 RUN groupadd --system summarizer && useradd --system --gid summarizer summarizer \
     && mkdir -p /data/files && chown -R summarizer:summarizer /data

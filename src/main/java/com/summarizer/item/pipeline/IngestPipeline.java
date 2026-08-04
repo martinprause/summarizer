@@ -46,6 +46,7 @@ public class IngestPipeline {
     private final com.summarizer.item.TagService tags;
     private final com.summarizer.base.JobProgressService progress;
     private final Path filesDir;
+    private final com.summarizer.item.extract.YouTubeTranscriptService youtube;
 
     public IngestPipeline(ItemRepository items, CategoryRepository categories,
                           FavoritesService favorites, WebPageExtractor extractor,
@@ -55,7 +56,9 @@ public class IngestPipeline {
                           OllamaClient ollama, com.summarizer.ai.WhisperClient whisper,
                           com.summarizer.item.TagService tags,
                           com.summarizer.base.JobProgressService progress,
-                          @Value("${summarizer.files.dir}") String filesDir) {
+                          @Value("${summarizer.files.dir}") String filesDir,
+                          com.summarizer.item.extract.YouTubeTranscriptService youtube) {
+        this.youtube = youtube;
         this.progress = progress;
         this.fileExtractor = fileExtractor;
         this.whisper = whisper;
@@ -121,6 +124,27 @@ public class IngestPipeline {
         boolean isWeb = item.getType() == Item.Type.WEBPAGE || item.getType() == Item.Type.BOOKMARK;
         if (!isWeb || item.getSourceUrl() == null) {
             return;
+        }
+        // YouTube: Untertitel bzw. Whisper-Transkript statt nutzloser Consent-Seite
+        if (com.summarizer.item.extract.YouTubeTranscriptService.isYoutubeUrl(item.getSourceUrl())
+                && (item.getRawText() == null || item.getRawText().isBlank())) {
+            var transcript = youtube.fetch(item.getSourceUrl());
+            if (transcript.isPresent()) {
+                var t = transcript.get();
+                if ((item.getTitle() == null || item.getTitle().isBlank()) && !t.title().isBlank()) {
+                    item.setTitle("▶ " + t.title());
+                }
+                item.setRawText(t.text());
+                com.summarizer.item.extract.YouTubeTranscriptService.videoId(item.getSourceUrl())
+                        .ifPresent(id -> item.setThumbnailUrl(
+                                com.summarizer.item.extract.YouTubeTranscriptService.thumbnailUrl(id)));
+                log.info("Item {}: YouTube-Transkript via {} ({} Zeichen)",
+                        item.getId(), t.source(), t.text().length());
+                return;
+            }
+            item.setErrorMessage("YouTube: kein Transkript verfügbar (Untertitel fehlen"
+                    + (youtube.isAvailable() ? " und Whisper-Fallback erfolglos)" : ", yt-dlp nicht installiert)"));
+            // weiter mit normaler Extraktion — liefert wenigstens den Seitentitel
         }
         try {
             WebPageExtractor.Extracted extracted = extractor.extract(item.getSourceUrl());
