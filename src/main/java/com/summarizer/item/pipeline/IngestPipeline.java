@@ -484,6 +484,52 @@ public class IngestPipeline {
         }
     }
 
+    /**
+     * Alle fertigen Items neu zusammenfassen (Stichpunkt-Format) — sequenziell,
+     * ein LLM-Aufruf nach dem anderen. Geänderte Items werden neu vektorisiert.
+     */
+    @Async
+    public void resummarizeAll(Long userId) {
+        List<Item> all = items.findByUserIdAndStatus(userId, Item.Status.DONE).stream()
+                .filter(i -> i.getRawText() != null && i.getRawText().length() >= 200)
+                .toList();
+        String key = com.summarizer.base.JobProgressService.resummarizeKey(userId);
+        progress.start(key, "Neu zusammenfassen", all.size());
+        int done = 0;
+        int updated = 0;
+        for (Item item : all) {
+            if (!ollama.isAvailable()) {
+                progress.finish(key, updated + " aktualisiert — abgebrochen, Ollama nicht erreichbar");
+                com.summarizer.base.UiNotifier.broadcast(
+                        "📝 Neu zusammenfassen abgebrochen: Ollama nicht erreichbar ("
+                                + updated + " bereits aktualisiert)");
+                return;
+            }
+            String before = item.getSummary();
+            try {
+                summarize(item);
+            } catch (Exception e) {
+                log.warn("Neu zusammenfassen für Item {} fehlgeschlagen: {}",
+                        item.getId(), e.getMessage());
+            }
+            if (!java.util.Objects.equals(before, item.getSummary())) {
+                items.save(item);
+                try {
+                    vectorize(item);   // Summary steckt mit im Embedding-Text
+                } catch (Exception e) {
+                    log.warn("Re-Vektorisierung für Item {} fehlgeschlagen: {}",
+                            item.getId(), e.getMessage());
+                }
+                updated++;
+            }
+            progress.update(key, ++done);
+        }
+        String result = updated + " von " + all.size() + " aktualisiert";
+        progress.finish(key, result);
+        com.summarizer.base.UiNotifier.broadcast("📝 Neu zusammengefasst: " + result);
+        log.info("Neu zusammenfassen für User {}: {}", userId, result);
+    }
+
     /** Transkript-Items (Audio/YouTube): Volltext ist das Transkript, Beschreibung kürzer. */
     private boolean isTranscript(Item item) {
         if (item.getType() == Item.Type.AUDIO) {

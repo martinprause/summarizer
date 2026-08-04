@@ -25,7 +25,9 @@ public class SystemView extends VerticalLayout {
                       org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                       @Value("${summarizer.ollama.chat-model}") String chatModel,
                       @Value("${summarizer.ollama.embedding-model}") String embeddingModel,
-                      @Value("${summarizer.version:dev}") String appVersion) {
+                      @Value("${summarizer.version:dev}") String appVersion,
+                      com.summarizer.item.pipeline.IngestPipeline pipeline,
+                      com.summarizer.base.JobProgressService jobs) {
         add(new H2(getTranslation("system.status.title")));
         add(statusLine(getTranslation("system.status.version", appVersion), true));
         try {
@@ -72,6 +74,7 @@ public class SystemView extends VerticalLayout {
         addLanguageSection(settings);
         addImportSection(settings, currentUser);
         addArchitectSection(settings, currentUser);
+        addResummarizeSection(pipeline, jobs, currentUser);
         addDangerSection(jdbc, currentUser);
         addAccessSection(settings, currentUser, users, passwordEncoder);
     }
@@ -183,6 +186,47 @@ public class SystemView extends VerticalLayout {
             }
         });
         add(enabled, threshold);
+    }
+
+    /** Wartung: alle Zusammenfassungen neu im Stichpunkt-Format erzeugen. */
+    private void addResummarizeSection(com.summarizer.item.pipeline.IngestPipeline pipeline,
+                                       com.summarizer.base.JobProgressService jobs,
+                                       com.summarizer.base.CurrentUser currentUser) {
+        add(new com.vaadin.flow.component.html.H2(getTranslation("system.resummarize.title")));
+        com.vaadin.flow.component.html.Paragraph hint =
+                new com.vaadin.flow.component.html.Paragraph(getTranslation("system.resummarize.hint"));
+        hint.getStyle().set("color", "var(--lumo-secondary-text-color)").set("font-size", "0.9em");
+        add(hint);
+
+        Long userId = currentUser.id();
+        String key = com.summarizer.base.JobProgressService.resummarizeKey(userId);
+        com.vaadin.flow.component.button.Button run = new com.vaadin.flow.component.button.Button(
+                getTranslation("system.resummarize.button"));
+        if (jobs.isRunning(key)) {
+            run.setEnabled(false);
+            run.setText(getTranslation("system.resummarize.running"));
+        }
+        run.addClickListener(e -> {
+            if (jobs.isRunning(key)) {
+                com.vaadin.flow.component.notification.Notification.show(
+                        getTranslation("system.resummarize.running"));
+                return;
+            }
+            com.vaadin.flow.component.confirmdialog.ConfirmDialog confirm =
+                    new com.vaadin.flow.component.confirmdialog.ConfirmDialog(
+                            getTranslation("system.resummarize.title"),
+                            getTranslation("system.resummarize.confirm"),
+                            getTranslation("system.resummarize.button"), ev -> {
+                                pipeline.resummarizeAll(userId);
+                                run.setEnabled(false);
+                                run.setText(getTranslation("system.resummarize.running"));
+                                com.vaadin.flow.component.notification.Notification.show(
+                                        getTranslation("system.resummarize.started"));
+                            },
+                            getTranslation("system.danger.cancel"), ev -> { });
+            confirm.open();
+        });
+        add(run);
     }
 
     /** Zugriff: Login an/aus — Standard ist ohne Login (rein lokaler Betrieb). */

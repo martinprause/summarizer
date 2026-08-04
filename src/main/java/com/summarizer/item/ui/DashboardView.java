@@ -563,8 +563,9 @@ public class DashboardView extends HorizontalLayout {
     }
 
     private List<Category> normalRoots() {
+        // Nur Favoriten haben einen eigenen Baum — "Privat" (DEFAULT) gehört in den Haupt-Tree
         return categoryTree.roots(user.getId()).stream()
-                .filter(c -> c.getSystemType() == null)
+                .filter(c -> !c.isFavorites())
                 .toList();
     }
 

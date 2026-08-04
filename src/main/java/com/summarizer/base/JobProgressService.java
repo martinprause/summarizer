@@ -35,6 +35,10 @@ public class JobProgressService {
         return "reembed";
     }
 
+    public static String resummarizeKey(Long userId) {
+        return "resummarize-" + userId;
+    }
+
     public boolean isRunning(String key) {
         Progress progress = jobs.get(key);
         return progress != null && progress.running();
