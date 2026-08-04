@@ -64,10 +64,16 @@ public class LinkCheckService {
     }
 
     /** Titel-Muster von "Soft-404"-Seiten: Server sagt 200, zeigt aber eine Fehlerseite. */
-    private static final java.util.List<String> SOFT_404_PATTERNS = java.util.List.of(
+    private static final java.util.List<String> SOFT_404_TITLE_PATTERNS = java.util.List.of(
             "404", "not found", "page not found", "nicht gefunden", "seite nicht gefunden",
             "existiert nicht", "nicht verfügbar", "does not exist", "no longer available",
             "nicht mehr verfügbar", "page introuvable", "gone", "error 410");
+
+    /** Body-Muster: nur eindeutige Mehrwort-Phrasen — bares "404" gäbe Fehlalarme. */
+    private static final java.util.List<String> SOFT_404_BODY_PATTERNS = java.util.List.of(
+            "page not found", "page could not be found", "seite nicht gefunden",
+            "seite wurde nicht gefunden", "diese seite existiert nicht",
+            "this page doesn't exist", "this page does not exist");
 
     private boolean isReachable(HttpClient client, String url) {
         try {
@@ -111,18 +117,20 @@ public class LinkCheckService {
             if (body == null) {
                 return false;
             }
-            String head = body.substring(0, Math.min(body.length(), 20_000)).toLowerCase();
+            String head = body.substring(0, Math.min(body.length(), 30_000)).toLowerCase();
             int titleStart = head.indexOf("<title");
-            if (titleStart < 0) {
-                return false;
+            if (titleStart >= 0) {
+                int contentStart = head.indexOf('>', titleStart);
+                int titleEnd = head.indexOf("</title>", titleStart);
+                if (contentStart >= 0 && titleEnd > contentStart) {
+                    String title = head.substring(contentStart + 1, titleEnd);
+                    if (SOFT_404_TITLE_PATTERNS.stream().anyMatch(title::contains)) {
+                        return true;
+                    }
+                }
             }
-            int contentStart = head.indexOf('>', titleStart);
-            int titleEnd = head.indexOf("</title>", titleStart);
-            if (contentStart < 0 || titleEnd < 0 || titleEnd <= contentStart) {
-                return false;
-            }
-            String title = head.substring(contentStart + 1, titleEnd);
-            return SOFT_404_PATTERNS.stream().anyMatch(title::contains);
+            // SPAs mit generischem Titel: eindeutige Fehlerphrasen im Seitenanfang
+            return SOFT_404_BODY_PATTERNS.stream().anyMatch(head::contains);
         } catch (Exception e) {
             return false;   // Body nicht lesbar -> nicht als Soft-404 werten
         }

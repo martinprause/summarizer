@@ -43,6 +43,8 @@ public class RagService {
                 Deckt ein Auszug das Thema nur teilweise ab, gib wieder, was das Archiv dazu \
                 enthält, und nenne die Quelle — antworte nur dann mit "dazu findet sich nichts", \
                 wenn KEIN Auszug thematisch passt. \
+                Ist die Frage nur ein Stichwort, fasse in eigenen Worten zusammen, was das \
+                Archiv zu diesem Thema enthält — kopiere NIE Auszüge wörtlich. \
                 Verweise auf Quellen in der Form [1], [2]. Antworte in Markdown.
 
                 %s

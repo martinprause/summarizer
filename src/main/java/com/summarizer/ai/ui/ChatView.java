@@ -146,9 +146,11 @@ public class ChatView extends VerticalLayout {
                     buffer.append(token);
                     ui.access(() -> streaming.setText(buffer.toString()));
                 });
-                String answer = full == null || full.isBlank()
+                // Kleine Modelle plappern manchmal die Daten-Grenzmarker nach — tilgen
+                String cleaned = com.summarizer.ai.PromptSanitizer.stripMarkers(full);
+                String answer = cleaned == null || cleaned.isBlank()
                         ? llmUnavailableText
-                        : full.strip();
+                        : cleaned;
                 history.save(userId, "ASSISTANT", answer);
                 Div tiles = resultTiles(prompt.sources(), untitledText, relevancePattern);
                 ui.access(() -> {
