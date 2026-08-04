@@ -571,19 +571,6 @@ public class IngestPipeline {
         return sb.isEmpty() ? null : sb.toString();
     }
 
-    /** Ein String-Feld aus einer Structured-Output-Antwort ziehen (null-sicher). */
-    static String jsonString(String json, String field) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        try {
-            var node = new tools.jackson.databind.ObjectMapper().readTree(json);
-            return node.has(field) ? node.get(field).asText() : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     /**
      * Alle fertigen Items neu klassifizieren — zweistufig:
      * Pass 1 ordnet gegen den bestehenden Baum zu (Schwelle aus den Einstellungen),
