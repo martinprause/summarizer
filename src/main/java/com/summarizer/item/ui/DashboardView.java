@@ -965,9 +965,23 @@ public class DashboardView extends HorizontalLayout {
     private void reload() {
         offset = 0;
         cardsContainer.removeAll();
+        refreshCategoryCounts();
         updateFilterInfo();
         updateBulkBar();
         loadPage();
+    }
+
+    /** Zähler im Baum bei JEDEM Neuladen aktualisieren (DnD, Zuweisen, Filter …). */
+    private void refreshCategoryCounts() {
+        java.util.Map<Long, Long> fresh = new java.util.HashMap<>();
+        for (Object[] row : itemRepository.countPerCategory(user.getId())) {
+            fresh.put((Long) row[0], (Long) row[1]);
+        }
+        if (!fresh.equals(categoryCounts)) {
+            categoryCounts = fresh;
+            mainTree.getDataProvider().refreshAll();
+            favTree.getDataProvider().refreshAll();
+        }
     }
 
     private void updateFilterInfo() {
