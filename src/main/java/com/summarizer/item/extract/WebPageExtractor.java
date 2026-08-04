@@ -17,9 +17,10 @@ public class WebPageExtractor {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Summarizer/0.1";
 
     public Extracted extract(String url) throws Exception {
+        // 8s statt 15s: tote Links bremsen sonst den Massen-Import massiv
         Document doc = Jsoup.connect(url)
                 .userAgent(USER_AGENT)
-                .timeout(15_000)
+                .timeout(8_000)
                 .followRedirects(true)
                 .get();
 

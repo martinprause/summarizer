@@ -23,12 +23,20 @@ public class PipelineResumer implements ApplicationRunner {
     private final JdbcTemplate jdbc;
     private final IngestPipeline pipeline;
     private final com.summarizer.ai.OllamaClient ollama;
+    private final com.summarizer.graph.GraphExtractionService graphExtraction;
+    private final com.summarizer.item.ItemRepository items;
+    private final java.util.Set<Long> graphBackfillTried =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public PipelineResumer(JdbcTemplate jdbc, IngestPipeline pipeline,
-                           com.summarizer.ai.OllamaClient ollama) {
+                           com.summarizer.ai.OllamaClient ollama,
+                           com.summarizer.graph.GraphExtractionService graphExtraction,
+                           com.summarizer.item.ItemRepository items) {
         this.jdbc = jdbc;
         this.pipeline = pipeline;
         this.ollama = ollama;
+        this.graphExtraction = graphExtraction;
+        this.items = items;
     }
 
     @Override
@@ -68,6 +76,49 @@ public class PipelineResumer implements ApplicationRunner {
             pending.forEach(pipeline::process);
         } catch (Exception ignored) {
             // DB kurz weg — nächster Lauf versucht es erneut
+        }
+    }
+
+    /**
+     * Graph-Backfill: Beim Massen-Import wird die Graph-Extraktion übersprungen.
+     * Sobald kein Import mehr läuft, holt dieser Job sie schubweise nach —
+     * fertige Items ohne Graph-Verknüpfung erkennt man an fehlenden item_entities.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 180000, initialDelay = 90000)
+    public void backfillGraph() {
+        try {
+            if (!ollama.isAvailable()) {
+                return;
+            }
+            if (items.countByStatus(com.summarizer.item.Item.Status.PENDING) > 0) {
+                return;   // Import läuft noch — nicht dazwischenfunken
+            }
+            List<Long> missing = jdbc.queryForList("""
+                    SELECT i.id FROM items i
+                    WHERE i.status = 'DONE'
+                      AND NOT EXISTS (SELECT 1 FROM item_entities ie WHERE ie.item_id = i.id)
+                    ORDER BY i.id
+                    LIMIT 40
+                    """, Long.class);
+            // Bereits versuchte Items nicht endlos wiederholen (z. B. Inhalte,
+            // aus denen das LLM schlicht keine Entitäten zieht)
+            missing = missing.stream().filter(id -> !graphBackfillTried.contains(id)).toList();
+            if (missing.isEmpty()) {
+                return;
+            }
+            log.info("Graph-Backfill: {} Inhalte ohne Graph-Verknüpfung", missing.size());
+            for (Long id : missing) {
+                graphBackfillTried.add(id);
+                items.findById(id).ifPresent(item -> {
+                    try {
+                        graphExtraction.extract(item);
+                    } catch (Exception e) {
+                        log.debug("Graph-Backfill für Item {} fehlgeschlagen: {}", id, e.getMessage());
+                    }
+                });
+            }
+        } catch (Exception ignored) {
+            // nächster Lauf versucht es erneut
         }
     }
 }

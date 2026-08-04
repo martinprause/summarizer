@@ -42,6 +42,30 @@ public class ClassificationService {
         return parse(answer, categories, paths);
     }
 
+    /** Kategorienliste als Prompt-Baustein (für den kombinierten Pipeline-Aufruf). */
+    public String categoryListing(List<Category> categories) {
+        Map<Long, String> paths = buildPaths(categories);
+        StringBuilder sb = new StringBuilder();
+        categories.stream()
+                .sorted((a, b) -> paths.get(a.getId()).compareToIgnoreCase(paths.get(b.getId())))
+                .forEach(c -> {
+                    sb.append("- ").append(paths.get(c.getId()));
+                    if (c.getDescription() != null && !c.getDescription().isBlank()) {
+                        sb.append(": ").append(c.getDescription());
+                    }
+                    sb.append('\n');
+                });
+        return sb.toString();
+    }
+
+    /** Eine "Pfad|Konfidenz"-Zeile gegen die Kategorien auflösen (kombinierter Aufruf). */
+    public Optional<Result> matchLine(String line, List<Category> categories) {
+        if (line == null || line.isBlank() || categories.isEmpty()) {
+            return Optional.empty();
+        }
+        return parse(line, categories, buildPaths(categories));
+    }
+
     /** Voller Pfad je Kategorie, z. B. "Technik > KI". */
     private Map<Long, String> buildPaths(List<Category> categories) {
         Map<Long, Category> byId = new HashMap<>();

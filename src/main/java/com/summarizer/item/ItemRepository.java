@@ -17,5 +17,7 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     long countByUserId(Long userId);
 
+    long countByStatus(Item.Status status);
+
     long countByCategoryIdIn(List<Long> categoryIds);
 }

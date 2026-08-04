@@ -97,14 +97,16 @@ public class IngestPipeline {
             describeImageIfNeeded(item);
             extractFileTextIfNeeded(item);
             transcribeAudioIfNeeded(item);
-            summarize(item);
-            classify(item);
-            autoTag(item);
+            analyzeCombined(item);   // Zusammenfassung + Kategorie + Tags in EINEM LLM-Aufruf
             vectorize(item);
-            try {
-                graphExtraction.extract(item);
-            } catch (Exception e) {
-                log.warn("Graph-Extraktion für Item {} fehlgeschlagen: {}", itemId, e.getMessage());
+            // Massen-Import: Graph-Extraktion aufschieben — der Backfill-Job in
+            // PipelineResumer holt sie nach, sobald der Import durch ist.
+            if (items.countByStatus(Item.Status.PENDING) <= BULK_THRESHOLD) {
+                try {
+                    graphExtraction.extract(item);
+                } catch (Exception e) {
+                    log.warn("Graph-Extraktion für Item {} fehlgeschlagen: {}", itemId, e.getMessage());
+                }
             }
             item.setStatus(Item.Status.DONE);
         } catch (Exception e) {
@@ -245,6 +247,118 @@ public class IngestPipeline {
                 });
     }
 
+    /** Ab so vielen wartenden Items gilt "Massen-Import" — Graph später nachziehen. */
+    public static final int BULK_THRESHOLD = 20;
+
+    /**
+     * Kombinierter LLM-Aufruf: Zusammenfassung, Kategorie und Tags in einer Antwort
+     * (drei Zeilen SUMMARY|/CATEGORY|/TAGS|) — spart zwei von drei LLM-Runden.
+     * Fehlt eine Zeile, greifen die Einzelschritte als Fallback.
+     */
+    private void analyzeCombined(Item item) {
+        String text = (item.getTitle() == null ? "" : item.getTitle() + "\n")
+                + (item.getRawText() == null ? "" : item.getRawText());
+        if (text.isBlank()) {
+            return;
+        }
+        List<Long> favoriteIds = favorites.subtreeIds(item.getUserId());
+        List<Category> userCategories = categories
+                .findByUserIdOrderBySortOrderAscNameAsc(item.getUserId()).stream()
+                .filter(c -> !favoriteIds.contains(c.getId()))
+                .toList();
+        List<String> existingTags = tags.allTagNames(item.getUserId());
+
+        String prompt = """
+                Analysiere den folgenden Inhalt und antworte mit GENAU drei Zeilen,
+                jede beginnt mit ihrem Schlüsselwort:
+
+                SUMMARY|Zusammenfassung in 2-3 prägnanten deutschen Sätzen (kein Präfix, keine Einleitung)
+                CATEGORY|Kategoriepfad|Konfidenz zwischen 0 und 1
+                TAGS|2 bis 5 kleingeschriebene schlagworte, kommagetrennt
+
+                Kategorien (hierarchisch, "Eltern > Kind" — Pfad EXAKT übernehmen,
+                wähle die SPEZIFISCHSTE passende):
+                %s
+                Regeln für Tags:
+                - Tags beschreiben, WORUM ES GEHT (Themen, Orte, Personen, Konzepte).
+                - VERBOTEN: Medium/Format/Quelle (bild, video, pdf, telegram, webseite ...).
+                - Bevorzuge vorhandene Tags, wenn sie passen: %s
+
+                %s
+
+                Inhalt:
+                %s
+                """.formatted(
+                userCategories.isEmpty() ? "(keine Kategorien definiert)"
+                        : classification.categoryListing(userCategories),
+                existingTags.isEmpty() ? "(noch keine vorhanden)" : String.join(", ", existingTags),
+                com.summarizer.ai.PromptSanitizer.GUARD_NOTE,
+                com.summarizer.ai.PromptSanitizer.wrapUntrusted(text, 5000));
+
+        String answer = llm.generate(prompt);
+        String summaryLine = null;
+        String categoryLine = null;
+        String tagLine = null;
+        if (answer != null) {
+            for (String line : answer.strip().lines().toList()) {
+                String l = line.strip();
+                if (l.regionMatches(true, 0, "SUMMARY|", 0, 8)) {
+                    summaryLine = l.substring(8).strip();
+                } else if (l.regionMatches(true, 0, "CATEGORY|", 0, 9)) {
+                    categoryLine = l.substring(9).strip();
+                } else if (l.regionMatches(true, 0, "TAGS|", 0, 5)) {
+                    tagLine = l.substring(5).strip();
+                }
+            }
+        }
+
+        String raw = item.getRawText();
+        boolean wantsSummary = raw != null && raw.length() >= 200;
+        if (wantsSummary && summaryLine != null && !summaryLine.isBlank()) {
+            item.setSummary(summaryLine);
+        } else if (wantsSummary) {
+            summarize(item);   // Fallback: Einzelaufruf
+        }
+
+        if (categoryLine != null && !userCategories.isEmpty()) {
+            classification.matchLine(categoryLine, userCategories).ifPresent(result -> {
+                item.setCategoryId(result.category().getId());
+                item.setCategoryConfidence(result.confidence());
+            });
+        }
+        if (item.getCategoryId() == null && !userCategories.isEmpty()) {
+            classify(item);    // Fallback
+        }
+
+        if (tagLine != null && !tagLine.isBlank()) {
+            applyTagLine(item, tagLine);
+        }
+        if (tags.tagsForItem(item.getId()).isEmpty()) {
+            autoTag(item);     // Fallback
+        }
+    }
+
+    /** Kommagetrennte Tag-Zeile filtern und setzen (gemeinsame Regeln mit autoTag). */
+    private void applyTagLine(Item item, String csv) {
+        List<String> parsed = java.util.Arrays.stream(csv.split(","))
+                .map(t -> t.strip().toLowerCase()
+                        .replaceAll("^#", "")
+                        .replaceAll("[\"'.]", ""))
+                .filter(t -> !t.isBlank() && t.length() <= 40 && t.split("\\s+").length <= 3)
+                .filter(t -> !BLOCKED_TAGS.contains(t))
+                .distinct()
+                .limit(5)
+                .toList();
+        if (!parsed.isEmpty()) {
+            tags.setTags(item.getUserId(), item.getId(), parsed);
+        }
+    }
+
+    private static final java.util.Set<String> BLOCKED_TAGS = java.util.Set.of(
+            "bild", "foto", "fotos", "video", "audio", "sprachnotiz", "sprachnachricht",
+            "telegram", "datei", "dateien", "pdf", "dokument", "webseite", "website",
+            "text", "screenshot", "notiz", "aufnahme", "upload", "link", "bookmark");
+
     /** 2-3-Sätze-Zusammenfassung — der Namensgeber der App. */
     private void summarize(Item item) {
         String text = item.getRawText();
@@ -339,25 +453,7 @@ public class IngestPipeline {
         if (answer == null || answer.isBlank()) {
             return;
         }
-        // Medium-/Format-Woerter blocken — Tags sollen den Inhalt beschreiben
-        java.util.Set<String> blocked = java.util.Set.of(
-                "bild", "foto", "fotos", "video", "audio", "sprachnotiz", "sprachnachricht",
-                "telegram", "datei", "dateien", "pdf", "dokument", "webseite", "website",
-                "text", "screenshot", "notiz", "aufnahme", "upload", "link", "bookmark");
-        List<String> parsed = java.util.Arrays.stream(answer.strip()
-                        .lines().findFirst().orElse("").split(","))
-                .map(t -> t.strip().toLowerCase()
-                        .replaceAll("^#", "")
-                        .replaceAll("[\"'.]", ""))
-                .filter(t -> !t.isBlank() && t.length() <= 40 && t.split("\\s+").length <= 3)
-                .filter(t -> !blocked.contains(t))
-                .distinct()
-                .limit(5)
-                .toList();
-        if (!parsed.isEmpty()) {
-            tags.setTags(item.getUserId(), item.getId(), parsed);
-            log.info("Item {}: Auto-Tags {}", item.getId(), parsed);
-        }
+        applyTagLine(item, answer.strip().lines().findFirst().orElse(""));
     }
 
     private void classify(Item item) {
