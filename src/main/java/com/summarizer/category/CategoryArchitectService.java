@@ -174,12 +174,14 @@ public class CategoryArchitectService {
             return Optional.empty();
         }
         // Dokument-Sätze als "Beschreibung" abfangen ("Der Vision Transformer ist …")
-        // — dann lieber leere Beschreibung als eine irreführende
-        if (description.length() > 180
-                || description.toLowerCase().matches("^(der|die|das|ein|eine|dieser|diese|dieses|this|the)\\s.*")
-                || description.matches(".*\\b(ist|sind|wird|werden|is|are)\\b.*[.!]$")) {
+        if (isBadDescription(description)) {
             log.info("Architekt: Beschreibung von '{}' verworfen (Dokument-Satz statt Schlagworte)", name);
             description = "";
+        }
+        // Ohne Beschreibung kann die Klassifikation die Kategorie später kaum
+        // treffen — dann lieber ein kurzer Extra-Aufruf als eine leere Anweisung
+        if (description.isBlank()) {
+            description = describeCategory(name);
         }
         // Existiert schon? Dann wiederverwenden statt neu
         Optional<Category> existing = userCategories.stream()
@@ -210,6 +212,70 @@ public class CategoryArchitectService {
         log.info("Architekt: neue Kategorie '{}'{} angelegt", name,
                 parent == null ? "" : " unter '" + parent.getName() + "'");
         return Optional.of(created);
+    }
+
+    private boolean isBadDescription(String description) {
+        return description.length() > 180
+                || description.toLowerCase().matches("^(der|die|das|ein|eine|dieser|diese|dieses|this|the)\\s.*")
+                || description.matches(".*\\b(ist|sind|wird|werden|is|are)\\b.*[.!]$");
+    }
+
+    /** LLM-Anweisung für eine neue Kategorie nachgenerieren: Schlagworte, die sie beschreiben. */
+    private String describeCategory(String name) {
+        String answer = llm.generate("""
+                Nenne 5 bis 8 allgemeine Schlagworte (Keywords), die das Themengebiet
+                der Archiv-Kategorie "%s" beschreiben. Deutsch, kleingeschrieben.
+                Beispiel für "Computer Vision": bilderkennung, objekterkennung,
+                bildklassifikation, vit, cnn, ocr
+                Keine Sätze, keine Erklärung.
+                """.formatted(name),
+                Map.of("type", "object",
+                        "properties", Map.of("keywords", Map.of("type", "array",
+                                "items", Map.of("type", "string"), "maxItems", 8)),
+                        "required", List.of("keywords")));
+        if (answer == null || answer.isBlank()) {
+            return "";
+        }
+        try {
+            var node = new tools.jackson.databind.ObjectMapper().readTree(answer);
+            List<String> keywords = new java.util.ArrayList<>();
+            if (node.has("keywords") && node.get("keywords").isArray()) {
+                node.get("keywords").forEach(k -> {
+                    String keyword = k.asText("").strip();
+                    if (!keyword.isBlank() && keyword.length() <= 40) {
+                        keywords.add(keyword);
+                    }
+                });
+            }
+            String description = String.join(", ", keywords);
+            return isBadDescription(description) ? "" : description;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * Bestehende Kategorien ohne LLM-Anweisung nachbessern (max. limit pro Aufruf).
+     * @return Anzahl gefüllter Beschreibungen.
+     */
+    public int fillMissingDescriptions(int limit) {
+        List<Category> empty = categories.findAll().stream()
+                .filter(c -> c.getSystemType() == null)
+                .filter(c -> c.getDescription() == null || c.getDescription().isBlank())
+                .limit(limit)
+                .toList();
+        int filled = 0;
+        for (Category category : empty) {
+            String description = describeCategory(category.getName());
+            if (!description.isBlank()) {
+                category.setDescription(description);
+                categories.save(category);
+                filled++;
+                log.info("Architekt: Beschreibung für '{}' nachgetragen: {}",
+                        category.getName(), description);
+            }
+        }
+        return filled;
     }
 
     private Category resolveParent(String parentPath, List<Category> userCategories) {

@@ -26,6 +26,7 @@ public class PipelineResumer implements ApplicationRunner {
     private final com.summarizer.graph.GraphExtractionService graphExtraction;
     private final com.summarizer.item.ItemRepository items;
     private final com.summarizer.ai.EmbeddingService embeddings;
+    private final com.summarizer.category.CategoryArchitectService architect;
     private final java.util.Set<Long> graphBackfillTried =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Set<Long> embeddingBackfillTried =
@@ -35,13 +36,15 @@ public class PipelineResumer implements ApplicationRunner {
                            com.summarizer.ai.OllamaClient ollama,
                            com.summarizer.graph.GraphExtractionService graphExtraction,
                            com.summarizer.item.ItemRepository items,
-                           com.summarizer.ai.EmbeddingService embeddings) {
+                           com.summarizer.ai.EmbeddingService embeddings,
+                           com.summarizer.category.CategoryArchitectService architect) {
         this.jdbc = jdbc;
         this.pipeline = pipeline;
         this.ollama = ollama;
         this.graphExtraction = graphExtraction;
         this.items = items;
         this.embeddings = embeddings;
+        this.architect = architect;
     }
 
     @Override
@@ -122,6 +125,24 @@ public class PipelineResumer implements ApplicationRunner {
                     }
                 });
             }
+        } catch (Exception ignored) {
+            // nächster Lauf versucht es erneut
+        }
+    }
+
+    /**
+     * Kategorien ohne LLM-Anweisung (Beschreibung) bekommen automatisch
+     * Schlagworte nachgetragen — z. B. wenn der Architekt eine Kategorie
+     * angelegt hat, deren Beschreibung verworfen wurde.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 300000, initialDelay = 45000)
+    public void backfillCategoryDescriptions() {
+        try {
+            if (!ollama.isAvailable()
+                    || items.countByStatus(com.summarizer.item.Item.Status.PENDING) > 0) {
+                return;
+            }
+            architect.fillMissingDescriptions(5);
         } catch (Exception ignored) {
             // nächster Lauf versucht es erneut
         }
