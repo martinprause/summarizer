@@ -172,6 +172,9 @@ if (-not (Test-Path ".env")) {
     $localLlm = Read-Host "Lokales LLM (Ollama im Container) verwenden? [J/n]"
     $useLocalLlm = $localLlm -ne "n"
 
+    $audio = Read-Host "Audio-Transkription installieren (Whisper, ca. 2 GB)? [J/n]"
+    $useWhisper = $audio -ne "n"
+
     $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
     if ($ram -ge 16) { $chatModel = "qwen3.5:9b" } else { $chatModel = "qwen3.5:4b" }
     Write-Host "RAM: $ram GB -> Chat-Modell: $chatModel (aenderbar im Studio unter 'KI-Modelle')"
@@ -197,6 +200,7 @@ CHAT_MODEL=$chatModel
 EMBEDDING_MODEL=$embedModel
 EMBEDDING_DIM=$embedDim
 APP_PORT=$appPort
+$(if ($useWhisper) { "WHISPER_MODEL=small" })
 "@ | Out-File -Encoding utf8 ".env"
     Write-Host ".env geschrieben." -ForegroundColor Green
 } else {
@@ -207,6 +211,7 @@ APP_PORT=$appPort
 $envContent = Get-Content ".env" -Raw
 $profiles = @("--profile", "app")
 if ($envContent -match "OLLAMA_BASE_URL=http://ollama") { $profiles += @("--profile", "local-llm") }
+if ($envContent -match "WHISPER_MODEL=") { $profiles += @("--profile", "whisper") }
 Write-Host "Lade Images von Docker Hub ..."
 docker compose @profiles pull
 if ($LASTEXITCODE -ne 0) {

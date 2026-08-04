@@ -456,7 +456,7 @@ CHAT_MODEL=$chat
 EMBEDDING_MODEL=$embed
 EMBEDDING_DIM=$dim
 APP_PORT=$port
-WHISPER_MODEL=small
+$(if ($audioBox.Checked) { "WHISPER_MODEL=small" })
 "@ | ForEach-Object { if (-not $envExists) { $_ | Out-File -Encoding utf8 ".env" } }
         if ($envExists) { Write-Log ".env existiert bereits - Konfiguration unveraendert." }
 

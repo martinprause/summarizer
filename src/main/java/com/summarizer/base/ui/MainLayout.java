@@ -33,19 +33,29 @@ public class MainLayout extends AppLayout {
     private final com.summarizer.ai.OllamaClient ollama;
     private final com.vaadin.flow.component.html.Span statusChip =
             new com.vaadin.flow.component.html.Span();
+    private final com.vaadin.flow.component.html.Span healthChip =
+            new com.vaadin.flow.component.html.Span();
     /** true sobald Chat- UND Embedding-Modell installiert sind — dann keine Checks mehr. */
     private volatile boolean modelsReady = false;
+    /** Gesundheits-Snapshot, im Hintergrund-Thread befüllt (HTTP nicht im UI-Thread). */
+    private volatile boolean dbDown;
+    private volatile boolean ollamaDown;
+    private volatile boolean whisperDown;
+
+    private final com.summarizer.ai.WhisperClient whisper;
 
     public MainLayout(AuthenticationContext authContext,
                       com.summarizer.settings.AppSettingsService settings,
                       org.springframework.jdbc.core.JdbcTemplate jdbc,
                       com.summarizer.base.JobProgressService jobs,
                       com.summarizer.base.CurrentUser currentUser,
-                      com.summarizer.ai.OllamaClient ollama) {
+                      com.summarizer.ai.OllamaClient ollama,
+                      com.summarizer.ai.WhisperClient whisper) {
         this.jdbc = jdbc;
         this.jobs = jobs;
         this.currentUser = currentUser;
         this.ollama = ollama;
+        this.whisper = whisper;
         com.vaadin.flow.component.html.Div logo = new com.vaadin.flow.component.html.Div();
         logo.setText("S");
         logo.addClassName("s-logo");
@@ -100,8 +110,15 @@ public class MainLayout extends AppLayout {
                 .set("white-space", "nowrap");
         statusChip.setVisible(false);
 
+        // Rote Warnleiste: Datenbank/Ollama/Whisper nicht erreichbar
+        healthChip.getStyle().set("font-size", "0.8rem").set("font-weight", "700")
+                .set("background", "#c62828").set("color", "white")
+                .set("border-radius", "999px").set("padding", "0.25em 0.9em")
+                .set("white-space", "nowrap");
+        healthChip.setVisible(false);
+
         HorizontalLayout navbar = new HorizontalLayout(new DrawerToggle(), logo, title,
-                statusChip, darkMode, logout);
+                healthChip, statusChip, darkMode, logout);
         navbar.setAlignItems(HorizontalLayout.Alignment.CENTER);
         navbar.setWidthFull();
 
@@ -157,10 +174,17 @@ public class MainLayout extends AppLayout {
     /** Hintergrund-Wächter: schiebt Status-Updates per Push in die UI. */
     private void startStatusWatcher(com.vaadin.flow.component.UI ui) {
         Thread.ofVirtual().start(() -> {
+            int tick = 0;
             try {
                 while (true) {
-                    Thread.sleep(4000);
+                    // Health-Checks (HTTP) laufen hier im Hintergrund-Thread,
+                    // alle 12 Sekunden — nicht bei jedem UI-Refresh
+                    if (tick % 3 == 0) {
+                        checkHealth();
+                    }
+                    tick++;
                     ui.access(this::refreshStatus);
+                    Thread.sleep(4000);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -168,6 +192,31 @@ public class MainLayout extends AppLayout {
                 // Seite geschlossen (UI detached) — Wächter beenden
             }
         });
+    }
+
+    /** DB-, Ollama- und Whisper-Erreichbarkeit prüfen (Whisper nur, wenn Audio wartet). */
+    private void checkHealth() {
+        try {
+            jdbc.queryForObject("SELECT 1", Integer.class);
+            dbDown = false;
+        } catch (Exception e) {
+            dbDown = true;
+        }
+        try {
+            ollamaDown = !ollama.isAvailable();
+        } catch (Exception e) {
+            ollamaDown = true;
+        }
+        try {
+            // Whisper ist optional — nur warnen, wenn Sprachnachrichten darauf warten
+            boolean audioPending = !dbDown && Boolean.TRUE.equals(jdbc.queryForObject("""
+                    SELECT count(*) > 0 FROM items
+                    WHERE type = 'AUDIO' AND status IN ('PENDING', 'PROCESSING')
+                    """, Boolean.class));
+            whisperDown = audioPending && !whisper.isAvailable();
+        } catch (Exception e) {
+            whisperDown = false;
+        }
     }
 
     /** Fehlende Pflicht-Modelle (Chat + Embedding), leer sobald alles installiert ist. */
@@ -196,6 +245,20 @@ public class MainLayout extends AppLayout {
     }
 
     private void refreshStatus() {
+        // Rote Warnleiste zuerst — unabhängig vom normalen Status-Chip
+        java.util.List<String> down = new java.util.ArrayList<>();
+        if (dbDown) {
+            down.add(getTranslation("nav.service.db"));
+        }
+        if (ollamaDown) {
+            down.add(getTranslation("nav.service.ollama"));
+        }
+        if (whisperDown) {
+            down.add(getTranslation("nav.service.whisper"));
+        }
+        healthChip.setText(down.isEmpty() ? ""
+                : getTranslation("nav.unreachable", String.join(" · ", down)));
+        healthChip.setVisible(!down.isEmpty());
         try {
             Integer active = jdbc.queryForObject("""
                     SELECT count(*) FROM items

@@ -142,6 +142,9 @@ if [[ ! -f .env ]]; then
     read -rp "Lokales LLM (Ollama im Container) verwenden? [J/n]: " locallm
     USE_LOCAL_LLM=$([[ "${locallm:-j}" == "n" ]] && echo no || echo yes)
 
+    read -rp "Audio-Transkription installieren (Whisper, ca. 2 GB)? [J/n]: " audio
+    USE_WHISPER=$([[ "${audio:-j}" == "n" ]] && echo no || echo yes)
+
     if [[ "$(uname)" == "Darwin" ]]; then
         RAM_GB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
     else
@@ -172,6 +175,7 @@ CHAT_MODEL=${CHAT_MODEL}
 EMBEDDING_MODEL=${EMBED_MODEL}
 EMBEDDING_DIM=${EMBED_DIM}
 APP_PORT=${APP_PORT}
+$([[ "$USE_WHISPER" == "yes" ]] && echo "WHISPER_MODEL=small")
 EOF
     echo ".env geschrieben."
 else
@@ -181,6 +185,7 @@ fi
 # --- 3. Stack starten ---
 PROFILES=(--profile app)
 grep -q "OLLAMA_BASE_URL=http://ollama" .env && PROFILES+=(--profile local-llm)
+grep -q "^WHISPER_MODEL=" .env && PROFILES+=(--profile whisper)
 echo "Lade Images von Docker Hub ..."
 if ! docker compose "${PROFILES[@]}" pull; then
     echo "FEHLER: Images konnten nicht geladen werden - Internetverbindung pruefen." >&2

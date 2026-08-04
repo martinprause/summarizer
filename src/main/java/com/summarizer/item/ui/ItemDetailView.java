@@ -150,6 +150,20 @@ public class ItemDetailView extends VerticalLayout implements HasUrlParameter<Lo
                     "<audio controls src=\"files/" + item.getId()
                             + "\" style=\"width:100%;max-width:520px\"></audio>");
             add(player);
+            // Nachträglich (erneut) transkribieren: Transkript verwerfen,
+            // komplette Pipeline neu — Whisper, Zusammenfassung, Kategorie, Tags, Vektoren
+            Button retranscribe = new Button(getTranslation("detail.retranscribe"), e -> {
+                item.setRawText(null);
+                item.setSummary(null);
+                item.setStatus(Item.Status.PENDING);
+                items.save(item);
+                pipeline.process(item.getId());
+                Notification.show(getTranslation("detail.retranscribeStarted"));
+                removeAll();
+                render(items.findById(item.getId()).orElse(item));
+            });
+            retranscribe.addThemeVariants(ButtonVariant.LUMO_SMALL);
+            add(retranscribe);
         }
 
         // Auto-Zusammenfassung prominent

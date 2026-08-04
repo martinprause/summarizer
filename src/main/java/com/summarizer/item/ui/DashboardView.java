@@ -102,15 +102,21 @@ public class DashboardView extends HorizontalLayout {
     private final com.summarizer.item.TagService tags;
 
     private final com.summarizer.settings.AppSettingsService settings;
+    private final com.summarizer.task.TaskService taskService;
+    private final com.summarizer.task.TaskRepository taskRepository;
 
     public DashboardView(ItemQueryService queries, ItemRepository itemRepository,
                          CategoryRepository categories, CategoryTreeService categoryTree,
                          FavoritesService favoritesService, IngestPipeline pipeline,
                          UserRepository userRepository, CurrentUser currentUser,
                          com.summarizer.item.TagService tags,
-                         com.summarizer.settings.AppSettingsService settings) {
+                         com.summarizer.settings.AppSettingsService settings,
+                         com.summarizer.task.TaskService taskService,
+                         com.summarizer.task.TaskRepository taskRepository) {
         this.tags = tags;
         this.settings = settings;
+        this.taskService = taskService;
+        this.taskRepository = taskRepository;
         this.queries = queries;
         this.itemRepository = itemRepository;
         this.categoryTree = categoryTree;
@@ -715,6 +721,7 @@ public class DashboardView extends HorizontalLayout {
         title.getStyle().set("font-weight", "600").set("line-height", "1.3");
         titleRow.add(title);
         titleRow.setFlexGrow(1, title);
+        titleRow.add(taskButton(card));
         titleRow.add(starButton(card));
 
         Div meta = new Div();
@@ -800,6 +807,56 @@ public class DashboardView extends HorizontalLayout {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** Kleines Icon auf der Kachel: Inhalt einer Aufgabe zuordnen oder neue anlegen. */
+    private Button taskButton(ItemQueryService.Card card) {
+        Button task = new Button("☑");
+        task.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_SMALL);
+        task.getStyle().set("color", "var(--vaadin-text-color-secondary, #999)")
+                .set("font-size", "1.0em");
+        task.setTooltipText(getTranslation("dashboard.card.task"));
+        task.getElement().executeJs("this.addEventListener('click', e => e.stopPropagation())");
+        task.addClickListener(e -> openAssignTaskDialog(card.id()));
+        return task;
+    }
+
+    /** Aufgabe zuordnen: bestehende wählen oder direkt neue anlegen. */
+    private void openAssignTaskDialog(Long itemId) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle(getTranslation("detail.tasks.assignHeader"));
+        dialog.setWidth("420px");
+
+        ComboBox<com.summarizer.task.Task> existing =
+                new ComboBox<>(getTranslation("detail.tasks.existing"));
+        existing.setItems(taskRepository.findByUserIdAndStatusNotOrderByDueDateAscIdAsc(
+                user.getId(), com.summarizer.task.Task.Status.DONE));
+        existing.setItemLabelGenerator(com.summarizer.task.Task::getTitle);
+        existing.setWidthFull();
+
+        TextField newTitle = new TextField(getTranslation("detail.tasks.newTitle"));
+        newTitle.setWidthFull();
+
+        Button save = new Button(getTranslation("detail.tasks.create"), e -> {
+            com.summarizer.task.Task target = existing.getValue();
+            if (target == null && !newTitle.getValue().isBlank()) {
+                target = new com.summarizer.task.Task(user.getId(), newTitle.getValue().strip());
+                target.setStartDate(java.time.LocalDate.now());
+                target.setDueDate(java.time.LocalDate.now().plusDays(7));
+                target = taskRepository.save(target);
+            }
+            if (target == null) {
+                return;
+            }
+            taskService.linkItem(itemId, target.getId());
+            dialog.close();
+            Notification.show(getTranslation("detail.tasks.assigned"));
+        });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        dialog.add(new VerticalLayout(existing, newTitle));
+        dialog.getFooter().add(save);
+        dialog.open();
     }
 
     private Button starButton(ItemQueryService.Card card) {

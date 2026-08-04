@@ -51,6 +51,8 @@ public class TasksView extends VerticalLayout {
     private final TaskGanttComponent gantt = new TaskGanttComponent();
     private final Checkbox hideDone = new Checkbox();
     private final Select<String> viewMode = new Select<>();
+    private final DatePicker filterFrom = new DatePicker();
+    private final DatePicker filterTo = new DatePicker();
     private final Span ganttEmpty = new Span();
     private Map<Long, Long> itemCounts = Map.of();
 
@@ -81,7 +83,18 @@ public class TasksView extends VerticalLayout {
         viewMode.setWidth("140px");
         viewMode.addValueChangeListener(e -> gantt.setViewMode(e.getValue()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(create, hideDone, viewMode);
+        // Datums-Eingrenzung: nur Aufgaben im gewählten Zeitraum (Gantt + Liste)
+        filterFrom.setPlaceholder(getTranslation("tasks.filter.from"));
+        filterFrom.setClearButtonVisible(true);
+        filterFrom.setWidth("150px");
+        filterFrom.addValueChangeListener(e -> refresh());
+        filterTo.setPlaceholder(getTranslation("tasks.filter.to"));
+        filterTo.setClearButtonVisible(true);
+        filterTo.setWidth("150px");
+        filterTo.addValueChangeListener(e -> refresh());
+
+        HorizontalLayout toolbar = new HorizontalLayout(create, hideDone, viewMode,
+                filterFrom, filterTo);
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.getStyle().set("flex-wrap", "wrap").set("gap", "1em");
         add(toolbar);
@@ -229,15 +242,29 @@ public class TasksView extends VerticalLayout {
         status.setLabel(getTranslation("tasks.field.status"));
         status.setItems(Task.Status.values());
         status.setItemLabelGenerator(this::statusLabel);
-        TextField color = new TextField(getTranslation("tasks.field.color"));
-        color.setPlaceholder("#3a4ad8");
-        color.setWidth("140px");
+
+        // Farbwahl: nativer Farbdialog des Browsers + "automatisch nach Status"
+        Span colorLabel = new Span(getTranslation("tasks.field.color"));
+        colorLabel.getStyle().set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
+        com.vaadin.flow.component.html.Input colorInput =
+                new com.vaadin.flow.component.html.Input();
+        colorInput.setType("color");
+        colorInput.getStyle().set("width", "46px").set("height", "34px")
+                .set("padding", "0").set("border", "none")
+                .set("background", "none").set("cursor", "pointer");
+        Checkbox autoColor = new Checkbox(getTranslation("tasks.field.colorAuto"));
+        autoColor.addValueChangeListener(e ->
+                colorInput.setEnabled(!Boolean.TRUE.equals(e.getValue())));
 
         if (existing == null) {
             start.setValue(LocalDate.now());
             due.setValue(LocalDate.now().plusDays(7));
             progress.setValue(0);
             status.setValue(Task.Status.TODO);
+            autoColor.setValue(true);
+            colorInput.setEnabled(false);
+            colorInput.setValue("#3a4ad8");
         } else {
             title.setValue(existing.getTitle());
             notes.setValue(existing.getNotes() == null ? "" : existing.getNotes());
@@ -245,7 +272,10 @@ public class TasksView extends VerticalLayout {
             due.setValue(existing.getDueDate());
             progress.setValue(existing.getProgress());
             status.setValue(existing.getStatus());
-            color.setValue(existing.getColor() == null ? "" : existing.getColor());
+            boolean hasColor = existing.getColor() != null && !existing.getColor().isBlank();
+            autoColor.setValue(!hasColor);
+            colorInput.setEnabled(hasColor);
+            colorInput.setValue(hasColor ? existing.getColor() : "#3a4ad8");
         }
 
         Button save = new Button(getTranslation("tasks.save"), e -> {
@@ -261,7 +291,7 @@ public class TasksView extends VerticalLayout {
             task.setDueDate(due.getValue());
             task.setProgress(progress.getValue() == null ? 0 : progress.getValue());
             task.setStatus(status.getValue());
-            task.setColor(color.getValue().isBlank() ? null : color.getValue().strip());
+            task.setColor(Boolean.TRUE.equals(autoColor.getValue()) ? null : colorInput.getValue());
             repository.save(task);
             dialog.close();
             Notification.show(getTranslation("tasks.saved"));
@@ -270,7 +300,9 @@ public class TasksView extends VerticalLayout {
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         HorizontalLayout dates = new HorizontalLayout(start, due);
-        HorizontalLayout meta = new HorizontalLayout(status, progress, color);
+        HorizontalLayout colorRow = new HorizontalLayout(colorLabel, colorInput, autoColor);
+        colorRow.setAlignItems(Alignment.CENTER);
+        HorizontalLayout meta = new HorizontalLayout(status, progress, colorRow);
         meta.setAlignItems(Alignment.END);
         VerticalLayout form = new VerticalLayout(title, notes, dates, meta);
         form.setPadding(false);
@@ -322,6 +354,20 @@ public class TasksView extends VerticalLayout {
         List<Task> all = hideDone.getValue()
                 ? repository.findByUserIdAndStatusNotOrderByDueDateAscIdAsc(currentUser.id(), Task.Status.DONE)
                 : repository.findByUserIdOrderByDueDateAscIdAsc(currentUser.id());
+        // Datums-Eingrenzung: Aufgabe bleibt, wenn ihr Zeitraum den Filter überlappt
+        LocalDate from = filterFrom.getValue();
+        LocalDate to = filterTo.getValue();
+        if (from != null || to != null) {
+            all = all.stream().filter(task -> {
+                LocalDate taskStart = task.getStartDate() != null ? task.getStartDate() : task.getDueDate();
+                LocalDate taskEnd = task.getDueDate() != null ? task.getDueDate() : task.getStartDate();
+                if (taskStart == null) {
+                    return false;
+                }
+                return (to == null || !taskStart.isAfter(to))
+                        && (from == null || !taskEnd.isBefore(from));
+            }).toList();
+        }
         itemCounts = service.itemCounts(currentUser.id());
         grid.setItems(all);
 

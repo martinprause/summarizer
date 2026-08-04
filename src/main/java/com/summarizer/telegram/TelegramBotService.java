@@ -339,6 +339,9 @@ public class TelegramBotService implements ApplicationRunner {
                         return;
                     }
                 }
+                // Nach 5 Minuten immer noch nicht fertig (z. B. KI-Dienste gerade
+                // nicht erreichbar) — Bescheid geben statt still zu bleiben
+                send(token, chatId, tr("telegram.delayed"));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
