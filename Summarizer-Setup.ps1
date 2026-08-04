@@ -290,6 +290,20 @@ volumes:
 '@ | Out-File -Encoding utf8 "docker-compose.yml"
             Write-Log "docker-compose.yml erzeugt."
         }
+        # GPU-Override: wird nur eingebunden, wenn OLLAMA_GPU=1 in .env steht
+        if (-not (Test-Path "docker-compose.gpu.yml")) {
+            @'
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+'@ | Out-File -Encoding utf8 "docker-compose.gpu.yml"
+        }
         if (-not (Test-Path "Summarizer-Start.ps1")) {
             @'
 # =====================================================================
@@ -338,8 +352,12 @@ if ($LASTEXITCODE -ne 0) {
 $profiles = @("--profile", "app")
 if ((Get-Content ".env" -Raw) -match "OLLAMA_BASE_URL=http://ollama") { $profiles += @("--profile", "local-llm") }
 if ((Get-Content ".env" -Raw) -match "WHISPER_MODEL=") { $profiles += @("--profile", "whisper") }
+$composeFiles = @("-f", "docker-compose.yml")
+if (((Get-Content ".env" -Raw) -match "OLLAMA_GPU=1") -and (Test-Path "docker-compose.gpu.yml")) {
+    $composeFiles += @("-f", "docker-compose.gpu.yml")
+}
 
-docker compose @profiles up -d *>$null
+docker compose @composeFiles @profiles up -d *>$null
 
 # Auf die App warten, dann Browser öffnen
 for ($i = 0; $i -lt 90; $i++) {
@@ -456,20 +474,34 @@ WHISPER_MODEL=small
 "@ | ForEach-Object { if (-not $envExists) { $_ | Out-File -Encoding utf8 ".env" } }
         if ($envExists) { Write-Log ".env existiert bereits - Konfiguration unverändert." }
 
+        # 3b. GPU einmalig erkennen: nutzbare NVIDIA-GPU -> Ollama mit GPU starten
+        if ((Get-Content ".env" -Raw) -notmatch "OLLAMA_GPU=") {
+            Set-Status "Prüfe GPU-Unterstützung ..." 30
+            docker run --rm --gpus=all alpine true *>$null
+            $gpu = if ($LASTEXITCODE -eq 0) { "1" } else { "0" }
+            Add-Content ".env" "OLLAMA_GPU=$gpu"
+            if ($gpu -eq "1") { Write-Log "NVIDIA-GPU erkannt - Ollama nutzt die GPU." }
+            else { Write-Log "Keine nutzbare GPU gefunden - Ollama läuft auf der CPU." }
+        }
+
         # 4. Images laden
         $profiles = @("--profile", "app")
         if ($llmBox.SelectedIndex -eq 0) { $profiles += @("--profile", "local-llm") }
         $profiles += @("--profile", "whisper")
+        $composeFiles = @("-f", "docker-compose.yml")
+        if ((Get-Content ".env" -Raw) -match "OLLAMA_GPU=1") {
+            $composeFiles += @("-f", "docker-compose.gpu.yml")
+        }
 
         Set-Status "Lade Programm-Images herunter ..." 35
         Write-Log "Ziehe fertige Images von Docker Hub (kein lokaler Build) ..."
-        docker compose @profiles pull 2>&1 | ForEach-Object { Write-Log $_ }
+        docker compose @composeFiles @profiles pull 2>&1 | ForEach-Object { Write-Log $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "Images konnten nicht geladen werden - Internetverbindung prüfen."
         }
 
         Set-Status "Starte Container ..." 55
-        docker compose @profiles up -d 2>&1 | ForEach-Object { Write-Log $_ }
+        docker compose @composeFiles @profiles up -d 2>&1 | ForEach-Object { Write-Log $_ }
         if ($LASTEXITCODE -ne 0) { throw "Container-Start fehlgeschlagen." }
 
         # 4b. Start-Verknüpfungen anlegen
