@@ -360,17 +360,35 @@ public class CategoriesView extends VerticalLayout {
                     Notification.Position.MIDDLE);
             return;
         }
-        boolean hasChildren = !treeService.children(currentUser.id(), category).isEmpty();
+        // Geschützte Kategorien dürfen auch nicht als Unterkategorie mitgelöscht werden
+        List<Category> subtreeCategories = new ArrayList<>();
+        for (Long id : subtree) {
+            repository.findById(id).ifPresent(subtreeCategories::add);
+        }
+        boolean protectedInside = subtreeCategories.stream()
+                .anyMatch(c -> !c.getId().equals(category.getId())
+                        && (c.isFavorites() || c.isDefaultCategory()));
+        if (protectedInside) {
+            Notification.show(getTranslation("categories.deleteProtectedChild"), 6000,
+                    Notification.Position.MIDDLE);
+            return;
+        }
+
+        boolean hasChildren = subtree.size() > 1;
         ConfirmDialog dialog = new ConfirmDialog();
         dialog.setHeader(getTranslation("categories.delete.header"));
         dialog.setText(getTranslation("categories.delete.text", category.getName())
-                + (hasChildren ? " " + getTranslation("categories.delete.textChildren") : ""));
+                + (hasChildren
+                        ? " " + getTranslation("categories.delete.textChildren",
+                                String.valueOf(subtree.size() - 1))
+                        : ""));
         dialog.setCancelable(true);
         dialog.setCancelText(getTranslation("categories.cancel"));
         dialog.setConfirmText(getTranslation("categories.delete"));
         dialog.setConfirmButtonTheme("error primary");
         dialog.addConfirmListener(e -> {
-            repository.delete(category);   // items.category_id → NULL, categories.parent_id → NULL
+            // Kompletten Teilbaum löschen — Unterkategorien verschwinden mit
+            repository.deleteAllById(subtree);
             refresh();
             Notification.show(getTranslation("categories.deleted"));
         });
