@@ -87,6 +87,27 @@ public class OllamaClient {
     }
 
     /**
+     * Thinking-Modelle (qwen3 & Co.) legen ihre Antwort sonst ins "thinking"-Feld —
+     * bei Structured Output bleibt "response" dann leer. Deshalb Denken abschalten.
+     * Capability pro Modell gecacht (POST /api/show).
+     */
+    private final java.util.concurrent.ConcurrentHashMap<String, Boolean> thinkingCapable =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private boolean supportsThinking(String model) {
+        return thinkingCapable.computeIfAbsent(model, m -> {
+            try {
+                Map<?, ?> response = restClient.post().uri("/api/show")
+                        .body(Map.of("model", m)).retrieve().body(Map.class);
+                Object caps = response == null ? null : response.get("capabilities");
+                return caps instanceof List<?> list && list.contains("thinking");
+            } catch (Exception e) {
+                return false;
+            }
+        });
+    }
+
+    /**
      * Structured Output: format = JSON-Schema (Ollama erzwingt dann valides JSON
      * nach diesem Schema — kein Format-Nachplappern mehr möglich).
      */
@@ -98,13 +119,17 @@ public class OllamaClient {
             return null;
         }
         try {
+            String model = chatModel();
             java.util.HashMap<String, Object> body = new java.util.HashMap<>();
-            body.put("model", chatModel());
+            body.put("model", model);
             body.put("prompt", prompt);
             body.put("stream", false);
             body.put("options", Map.of("temperature", 0));
             if (format != null) {
                 body.put("format", format);
+            }
+            if (supportsThinking(model)) {
+                body.put("think", false);
             }
             for (int attempt = 1; attempt <= 2; attempt++) {
                 try {
@@ -113,7 +138,17 @@ public class OllamaClient {
                             .body(body)
                             .retrieve()
                             .body(Map.class);
-                    return response == null ? null : (String) response.get("response");
+                    if (response == null) {
+                        return null;
+                    }
+                    String answer = (String) response.get("response");
+                    // Sicherheitsnetz: Antwort trotzdem im thinking-Feld gelandet
+                    if ((answer == null || answer.isBlank())
+                            && response.get("thinking") instanceof String thinking
+                            && !thinking.isBlank()) {
+                        return thinking;
+                    }
+                    return answer;
                 } catch (Exception e) {
                     log.warn("Ollama generate fehlgeschlagen (Versuch {}): {}", attempt, e.getMessage());
                     if (attempt == 1) {
@@ -162,9 +197,16 @@ public class OllamaClient {
             var httpClient = java.net.http.HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(5))
                     .build();
-            String body = mapper.writeValueAsString(Map.of(
-                    "model", chatModel(), "prompt", prompt, "stream", true,
-                    "options", Map.of("temperature", 0)));
+            String model = chatModel();
+            java.util.HashMap<String, Object> payload = new java.util.HashMap<>();
+            payload.put("model", model);
+            payload.put("prompt", prompt);
+            payload.put("stream", true);
+            payload.put("options", Map.of("temperature", 0));
+            if (supportsThinking(model)) {
+                payload.put("think", false);   // sonst minutenlanges stilles "Denken" im Chat
+            }
+            String body = mapper.writeValueAsString(payload);
             var request = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create(baseUrl + "/api/generate"))
                     .header("Content-Type", "application/json")
